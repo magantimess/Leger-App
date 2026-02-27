@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Summary from '@/components/Summary';
 import TransactionForm from '@/components/TransactionForm';
 import TransactionList from '@/components/TransactionList';
+import TransactionFilter from '@/components/TransactionFilter';
 import { MadeWithDyad } from "@/components/made-with-dyad";
 
 interface Transaction {
@@ -16,8 +17,10 @@ interface Transaction {
 
 const Index = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
-  // Load from localStorage for now (will be replaced by Supabase)
+  // Load from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('ledger_entries');
     if (saved) {
@@ -42,11 +45,22 @@ const Index = () => {
     setTransactions(transactions.filter(t => t.id !== id));
   };
 
-  const totalCredit = transactions
+  // Filter transactions based on date range
+  const filteredTransactions = transactions.filter(t => {
+    if (!startDate && !endDate) return true;
+    
+    const transactionDate = new Date(t.date).setHours(0, 0, 0, 0);
+    const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : -Infinity;
+    const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Infinity;
+    
+    return transactionDate >= start && transactionDate <= end;
+  }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const totalCredit = filteredTransactions
     .filter(t => t.type === 'credit')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const totalDebit = transactions
+  const totalDebit = filteredTransactions
     .filter(t => t.type === 'debit')
     .reduce((sum, t) => sum + t.amount, 0);
 
@@ -57,14 +71,20 @@ const Index = () => {
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
             Daily <span className="text-indigo-600">Ledger</span>
           </h1>
-          <p className="text-lg text-gray-500">Keep track of your daily finances with ease.</p>
+          <p className="text-lg text-gray-500">Manage your daily finances in INR with precise timestamps.</p>
         </header>
 
         <Summary totalCredit={totalCredit} totalDebit={totalDebit} />
         
         <div className="grid grid-cols-1 gap-8">
           <TransactionForm onAdd={addTransaction} />
-          <TransactionList transactions={transactions} onDelete={deleteTransaction} />
+          <TransactionFilter 
+            startDate={startDate} 
+            endDate={endDate} 
+            onStartDateChange={setStartDate} 
+            onEndDateChange={setEndDate} 
+          />
+          <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
         </div>
 
         <footer className="mt-16">

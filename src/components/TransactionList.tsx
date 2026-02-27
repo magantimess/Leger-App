@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { Trash2, Calendar } from 'lucide-react';
+import { Trash2, Clock } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -28,7 +28,7 @@ const TransactionList = ({ transactions, onDelete }: TransactionListProps) => {
         <div className="space-y-4">
           {transactions.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
-              <p>No entries yet. Start by adding one above!</p>
+              <p>No entries found for the selected range.</p>
             </div>
           ) : (
             transactions.map((t) => (
@@ -38,16 +38,18 @@ const TransactionList = ({ transactions, onDelete }: TransactionListProps) => {
               >
                 <div className="flex items-center space-x-4">
                   <div className={`p-3 rounded-xl ${t.type === 'credit' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                    <Calendar size={20} />
+                    <Clock size={20} />
                   </div>
                   <div>
                     <h4 className="font-semibold text-gray-800">{t.description}</h4>
-                    <p className="text-xs text-gray-400">{new Date(t.date).toLocaleDateString()}</p>
+                    <p className="text-xs text-gray-400">
+                      {new Date(t.date).toLocaleDateString('en-IN')} at {new Date(t.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-6">
                   <span className={`text-lg font-bold ${t.type === 'credit' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {t.type === 'credit' ? '+' : '-'}${t.amount.toFixed(2)}
+                    {t.type === 'credit' ? '+' : '-'}₹{t.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                   <Button 
                     variant="ghost" 
@@ -60,7 +62,7 @@ const TransactionList = ({ transactions, onDelete }: TransactionListProps) => {
                 </div>
               </div>
             ))
-          ).reverse()}
+          )}
         </div>
       </CardContent>
     </Card>
