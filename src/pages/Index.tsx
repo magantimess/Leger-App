@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Summary from '@/components/Summary';
 import TransactionForm from '@/components/TransactionForm';
 import TransactionList from '@/components/TransactionList';
@@ -8,6 +8,8 @@ import TransactionFilter from '@/components/TransactionFilter';
 import { MadeWithDyad } from "@/components/made-with-dyad";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
+import { Button } from "@/components/ui/button";
+import { RefreshCw, AlertCircle } from "lucide-react";
 
 interface Transaction {
   id: string;
@@ -20,25 +22,23 @@ interface Transaction {
 const Index = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>('all');
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     try {
       setLoading(true);
-      console.log("Fetching transactions from Supabase...");
-      const { data, error } = await supabase
+      setError(null);
+      console.log("Attempting to fetch transactions from Supabase...");
+      
+      const { data, error: supabaseError } = await supabase
         .from('ledger_entries')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error("Supabase fetch error:", error);
-        throw error;
-      }
-
-      console.log("Fetched data:", data);
+      if (supabaseError) throw supabaseError;
 
       const formattedData: Transaction[] = (data || []).map(item => ({
         id: item.id,
@@ -49,21 +49,26 @@ const Index = () => {
       }));
 
       setTransactions(formattedData);
-    } catch (error: any) {
-      showError("Failed to load entries: " + (error.message || "Unknown error"));
+      console.log("Successfully fetched transactions.");
+    } catch (err: any) {
+      const msg = err.message === 'Failed to fetch' 
+        ? "Connection timed out. Please check your internet or if Supabase is blocked." 
+        : err.message;
+      setError(msg);
+      showError(msg);
+      console.error("Fetch error:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchTransactions();
-  }, []);
+  }, [fetchTransactions]);
 
   const addTransaction = async (data: Omit<Transaction, 'id' | 'date'>) => {
     try {
-      console.log("Adding transaction to Supabase:", data);
-      const { data: newEntry, error } = await supabase
+      const { data: newEntry, error: insertError } = await supabase
         .from('ledger_entries')
         .insert([{
           description: data.description,
@@ -73,12 +78,7 @@ const Index = () => {
         .select()
         .single();
 
-      if (error) {
-        console.error("Supabase insert error:", error);
-        throw error;
-      }
-
-      console.log("Inserted entry:", newEntry);
+      if (insertError) throw insertError;
 
       const formattedEntry: Transaction = {
         id: newEntry.id,
@@ -90,28 +90,24 @@ const Index = () => {
 
       setTransactions(prev => [formattedEntry, ...prev]);
       showSuccess("Entry saved to database!");
-    } catch (error: any) {
-      showError("Failed to add entry: " + (error.message || "Unknown error"));
+    } catch (err: any) {
+      showError("Failed to add entry: " + err.message);
     }
   };
 
   const deleteTransaction = async (id: string) => {
     try {
-      console.log("Deleting transaction from Supabase:", id);
-      const { error } = await supabase
+      const { error: deleteError } = await supabase
         .from('ledger_entries')
         .delete()
         .eq('id', id);
 
-      if (error) {
-        console.error("Supabase delete error:", error);
-        throw error;
-      }
+      if (deleteError) throw deleteError;
 
       setTransactions(prev => prev.filter(t => t.id !== id));
       showSuccess("Entry deleted from database");
-    } catch (error: any) {
-      showError("Failed to delete entry: " + (error.message || "Unknown error"));
+    } catch (err: any) {
+      showError("Failed to delete entry: " + err.message);
     }
   };
 
@@ -165,14 +161,40 @@ const Index = () => {
             onStartDateChange={setStartDate} 
             onEndDateChange={setEndDate} 
           />
-          <div className="space-y-2">
-            {typeFilter !== 'all' && (
-              <p className="text-sm font-medium text-indigo-600 animate-in fade-in slide-in-from-left-2">
-                Showing only {typeFilter} entries
-              </p>
-            )}
-            {loading ? (
-              <div className="text-center py-12 text-gray-400">Loading entries from database...</div>
+          
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              {typeFilter !== 'all' && (
+                <p className="text-sm font-medium text-indigo-600">
+                  Showing only {typeFilter} entries
+                </p>
+              )}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={fetchTransactions} 
+                disabled={loading}
+                className="ml-auto rounded-full"
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
+
+            {error ? (
+              <div className="bg-rose-50 border border-rose-100 rounded-2xl p-8 text-center">
+                <AlertCircle className="mx-auto text-rose-500 mb-4" size={48} />
+                <h3 className="text-lg font-semibold text-rose-900 mb-2">Connection Error</h3>
+                <p className="text-rose-700 mb-6">{error}</p>
+                <Button onClick={fetchTransactions} className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl">
+                  Try Again
+                </Button>
+              </div>
+            ) : loading ? (
+              <div className="text-center py-12 text-gray-400">
+                <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
+                <p>Connecting to database...</p>
+              </div>
             ) : (
               <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
             )}
