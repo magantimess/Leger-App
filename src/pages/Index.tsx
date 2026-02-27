@@ -19,6 +19,7 @@ const Index = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>('all');
 
   // Load from localStorage
   useEffect(() => {
@@ -45,22 +46,33 @@ const Index = () => {
     setTransactions(transactions.filter(t => t.id !== id));
   };
 
-  // Filter transactions based on date range
+  // Filter transactions based on date range AND type
   const filteredTransactions = transactions.filter(t => {
-    if (!startDate && !endDate) return true;
-    
+    // Date filter
     const transactionDate = new Date(t.date).setHours(0, 0, 0, 0);
     const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : -Infinity;
     const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Infinity;
+    const matchesDate = transactionDate >= start && transactionDate <= end;
+
+    // Type filter
+    const matchesType = typeFilter === 'all' || t.type === typeFilter;
     
-    return transactionDate >= start && transactionDate <= end;
+    return matchesDate && matchesType;
   }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const totalCredit = filteredTransactions
+  // Totals should always reflect the date range, regardless of the type filter
+  const dateFilteredOnly = transactions.filter(t => {
+    const transactionDate = new Date(t.date).setHours(0, 0, 0, 0);
+    const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : -Infinity;
+    const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Infinity;
+    return transactionDate >= start && transactionDate <= end;
+  });
+
+  const totalCredit = dateFilteredOnly
     .filter(t => t.type === 'credit')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const totalDebit = filteredTransactions
+  const totalDebit = dateFilteredOnly
     .filter(t => t.type === 'debit')
     .reduce((sum, t) => sum + t.amount, 0);
 
@@ -74,7 +86,12 @@ const Index = () => {
           <p className="text-lg text-gray-500">Manage your daily finances in INR with precise timestamps.</p>
         </header>
 
-        <Summary totalCredit={totalCredit} totalDebit={totalDebit} />
+        <Summary 
+          totalCredit={totalCredit} 
+          totalDebit={totalDebit} 
+          activeFilter={typeFilter}
+          onFilterChange={setTypeFilter}
+        />
         
         <div className="grid grid-cols-1 gap-8">
           <TransactionForm onAdd={addTransaction} />
@@ -84,7 +101,14 @@ const Index = () => {
             onStartDateChange={setStartDate} 
             onEndDateChange={setEndDate} 
           />
-          <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
+          <div className="space-y-2">
+            {typeFilter !== 'all' && (
+              <p className="text-sm font-medium text-indigo-600 animate-in fade-in slide-in-from-left-2">
+                Showing only {typeFilter} entries
+              </p>
+            )}
+            <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
+          </div>
         </div>
 
         <footer className="mt-16">
