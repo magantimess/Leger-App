@@ -9,7 +9,7 @@ import { MadeWithDyad } from "@/components/made-with-dyad";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Database, Zap, AlertCircle, Info } from "lucide-react";
+import { RefreshCw, Zap, AlertCircle, WifiOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -34,14 +34,12 @@ const Index = () => {
       setLoading(true);
       setError(null);
       
-      console.log("Attempting to fetch from 'ledger_entries'...");
       const { data, error: supabaseError } = await supabase
         .from('ledger_entries')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (supabaseError) {
-        console.error("Supabase Fetch Error Details:", supabaseError);
         throw new Error(`${supabaseError.code}: ${supabaseError.message}`);
       }
 
@@ -54,9 +52,13 @@ const Index = () => {
       }));
 
       setTransactions(formattedData);
-      console.log("Successfully fetched", formattedData.length, "entries.");
     } catch (err: any) {
-      setError(err.message || "Failed to connect to the database.");
+      console.error("Connection Error:", err);
+      if (err.message.includes("Failed to fetch")) {
+        setError("Network Error: Unable to reach Supabase. Please check your internet connection or disable ad-blockers.");
+      } else {
+        setError(err.message || "Failed to connect to the database.");
+      }
     } finally {
       setLoading(false);
     }
@@ -68,7 +70,6 @@ const Index = () => {
 
   const addTransaction = async (formData: { description: string; amount: number; type: 'credit' | 'debit' }) => {
     try {
-      console.log("Attempting to insert entry:", formData);
       const { data: newEntry, error: supabaseError } = await supabase
         .from('ledger_entries')
         .insert([{
@@ -79,10 +80,7 @@ const Index = () => {
         .select()
         .single();
 
-      if (supabaseError) {
-        console.error("Supabase Insert Error Details:", supabaseError);
-        throw new Error(`${supabaseError.code}: ${supabaseError.message}`);
-      }
+      if (supabaseError) throw new Error(supabaseError.message);
 
       const formattedEntry: Transaction = {
         id: newEntry.id,
@@ -93,9 +91,9 @@ const Index = () => {
       };
 
       setTransactions(prev => [formattedEntry, ...prev]);
-      showSuccess("Entry saved to database!");
+      showSuccess("Entry saved!");
     } catch (err: any) {
-      showError("Database Error: " + err.message);
+      showError("Error: " + err.message);
     }
   };
 
@@ -147,7 +145,7 @@ const Index = () => {
           <div className="absolute top-0 right-0">
             <Badge variant="outline" className={`${error ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} flex items-center gap-1 px-3 py-1`}>
               <Zap size={14} />
-              {error ? 'Sync Error' : 'Database Online'}
+              {error ? 'Offline' : 'Online'}
             </Badge>
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
@@ -158,24 +156,19 @@ const Index = () => {
 
         {error && (
           <Alert variant="destructive" className="mb-8 bg-rose-50 border-rose-200 text-rose-900 rounded-2xl">
-            <AlertCircle className="h-5 w-5" />
-            <AlertTitle className="font-bold">Database Connection Issue</AlertTitle>
+            {error.includes("Network") ? <WifiOff className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+            <AlertTitle className="font-bold">Connection Issue</AlertTitle>
             <AlertDescription className="mt-2">
-              <p className="mb-4 font-mono text-sm bg-white/50 p-2 rounded border border-rose-100">{error}</p>
-              <div className="space-y-3">
-                <p className="text-sm">This usually happens if the table doesn't exist or RLS policies are blocking access.</p>
-                <div className="flex flex-wrap gap-3">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={fetchTransactions}
-                    className="bg-white border-rose-200 hover:bg-rose-100 text-rose-700"
-                  >
-                    <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                    Retry Sync
-                  </Button>
-                </div>
-              </div>
+              <p className="mb-4">{error}</p>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={fetchTransactions}
+                className="bg-white border-rose-200 hover:bg-rose-100 text-rose-700"
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Retry Connection
+              </Button>
             </AlertDescription>
           </Alert>
         )}
@@ -216,7 +209,7 @@ const Index = () => {
                 {loading && transactions.length === 0 ? (
                   <div className="text-center py-12 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200">
                     <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
-                    <p>Connecting to Supabase...</p>
+                    <p>Connecting...</p>
                   </div>
                 ) : (
                   <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
