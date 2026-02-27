@@ -9,7 +9,7 @@ import { MadeWithDyad } from "@/components/made-with-dyad";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, WifiOff, Database } from "lucide-react";
+import { RefreshCw, AlertTriangle, Database, Globe } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface Transaction {
@@ -23,28 +23,16 @@ interface Transaction {
 const Index = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isLocalMode, setIsLocalMode] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>('all');
 
-  const loadLocalData = () => {
-    const localData = localStorage.getItem('ledger_entries');
-    if (localData) {
-      setTransactions(JSON.parse(localData));
-    }
-    setIsLocalMode(true);
-  };
-
-  const saveLocalData = (data: Transaction[]) => {
-    localStorage.setItem('ledger_entries', JSON.stringify(data));
-    setTransactions(data);
-  };
-
   const fetchTransactions = useCallback(async () => {
     try {
       setLoading(true);
-      console.log("Attempting to fetch from Supabase...");
+      setError(null);
+      console.log("Connecting to Supabase...");
       
       const { data, error: supabaseError } = await supabase
         .from('ledger_entries')
@@ -62,14 +50,14 @@ const Index = () => {
       }));
 
       setTransactions(formattedData);
-      setIsLocalMode(false);
-      console.log("Connected to Supabase successfully.");
+      console.log("Successfully connected to Supabase.");
     } catch (err: any) {
-      console.warn("Supabase connection failed, falling back to local storage:", err.message);
-      loadLocalData();
-      if (err.message === 'Failed to fetch') {
-        showError("Network timeout. Using Local Storage mode.");
-      }
+      console.error("Supabase Connection Error:", err);
+      const msg = err.message === 'Failed to fetch' 
+        ? "Connection Timed Out. Your network might be blocking Supabase." 
+        : err.message;
+      setError(msg);
+      showError(msg);
     } finally {
       setLoading(false);
     }
@@ -80,18 +68,6 @@ const Index = () => {
   }, [fetchTransactions]);
 
   const addTransaction = async (data: Omit<Transaction, 'id' | 'date'>) => {
-    if (isLocalMode) {
-      const newEntry: Transaction = {
-        ...data,
-        id: crypto.randomUUID(),
-        date: new Date().toISOString()
-      };
-      const updated = [newEntry, ...transactions];
-      saveLocalData(updated);
-      showSuccess("Entry saved locally!");
-      return;
-    }
-
     try {
       const { data: newEntry, error: insertError } = await supabase
         .from('ledger_entries')
@@ -117,19 +93,10 @@ const Index = () => {
       showSuccess("Entry saved to database!");
     } catch (err: any) {
       showError("Failed to add entry: " + err.message);
-      // If it fails, offer to save locally
-      setIsLocalMode(true);
     }
   };
 
   const deleteTransaction = async (id: string) => {
-    if (isLocalMode) {
-      const updated = transactions.filter(t => t.id !== id);
-      saveLocalData(updated);
-      showSuccess("Entry deleted locally");
-      return;
-    }
-
     try {
       const { error: deleteError } = await supabase
         .from('ledger_entries')
@@ -175,76 +142,99 @@ const Index = () => {
       <div className="max-w-4xl mx-auto">
         <header className="text-center mb-12 relative">
           <div className="absolute top-0 right-0">
-            {isLocalMode ? (
-              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1 px-3 py-1">
-                <WifiOff size={14} />
-                Local Mode
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-1 px-3 py-1">
-                <Database size={14} />
-                Connected
-              </Badge>
-            )}
+            <Badge variant="outline" className={`${error ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} flex items-center gap-1 px-3 py-1`}>
+              <Database size={14} />
+              {error ? 'Disconnected' : 'Supabase Live'}
+            </Badge>
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
             Daily <span className="text-indigo-600">Ledger</span>
           </h1>
-          <p className="text-lg text-gray-500">Manage your daily finances in INR with precise timestamps.</p>
+          <p className="text-lg text-gray-500">Real-time financial tracking powered by Supabase.</p>
         </header>
 
-        <Summary 
-          totalCredit={totalCredit} 
-          totalDebit={totalDebit} 
-          activeFilter={typeFilter}
-          onFilterChange={setTypeFilter}
-        />
-        
-        <div className="grid grid-cols-1 gap-8">
-          <TransactionForm onAdd={addTransaction} />
-          <TransactionFilter 
-            startDate={startDate} 
-            endDate={endDate} 
-            onStartDateChange={setStartDate} 
-            onEndDateChange={setEndDate} 
-          />
-          
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col gap-1">
-                {typeFilter !== 'all' && (
-                  <p className="text-sm font-medium text-indigo-600">
-                    Showing only {typeFilter} entries
-                  </p>
-                )}
-                {isLocalMode && (
-                  <p className="text-xs text-amber-600 font-medium">
-                    Data is being saved to your browser locally.
-                  </p>
-                )}
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={fetchTransactions} 
-                disabled={loading}
-                className="ml-auto rounded-full"
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                {isLocalMode ? 'Retry Connection' : 'Refresh'}
-              </Button>
+        {error ? (
+          <div className="bg-white border-2 border-rose-100 rounded-3xl p-10 shadow-xl text-center mb-8">
+            <div className="bg-rose-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle className="text-rose-500" size={40} />
             </div>
-
-            {loading ? (
-              <div className="text-center py-12 text-gray-400">
-                <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
-                <p>Checking connection...</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Connection Blocked</h2>
+            <p className="text-gray-600 mb-8 max-w-md mx-auto">
+              We couldn't reach your Supabase database. This is usually caused by a network firewall or ISP restriction.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 text-left max-w-lg mx-auto">
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <div className="flex items-center gap-2 text-indigo-600 font-semibold mb-1">
+                  <Globe size={16} />
+                  <span>Check Network</span>
+                </div>
+                <p className="text-xs text-gray-500">Try switching to a different Wi-Fi or mobile hotspot.</p>
               </div>
-            ) : (
-              <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
-            )}
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <div className="flex items-center gap-2 text-indigo-600 font-semibold mb-1">
+                  <Database size={16} />
+                  <span>Project Status</span>
+                </div>
+                <p className="text-xs text-gray-500">Ensure your Supabase project is active and not paused.</p>
+              </div>
+            </div>
+            <Button 
+              onClick={fetchTransactions} 
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-6 rounded-2xl text-lg font-semibold transition-all"
+            >
+              <RefreshCw className={`mr-2 ${loading ? 'animate-spin' : ''}`} size={20} />
+              Retry Connection
+            </Button>
           </div>
-        </div>
+        ) : (
+          <>
+            <Summary 
+              totalCredit={totalCredit} 
+              totalDebit={totalDebit} 
+              activeFilter={typeFilter}
+              onFilterChange={setTypeFilter}
+            />
+            
+            <div className="grid grid-cols-1 gap-8">
+              <TransactionForm onAdd={addTransaction} />
+              <TransactionFilter 
+                startDate={startDate} 
+                endDate={endDate} 
+                onStartDateChange={setStartDate} 
+                onEndDateChange={setEndDate} 
+              />
+              
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  {typeFilter !== 'all' && (
+                    <p className="text-sm font-medium text-indigo-600">
+                      Showing only {typeFilter} entries
+                    </p>
+                  )}
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={fetchTransactions} 
+                    disabled={loading}
+                    className="ml-auto rounded-full"
+                  >
+                    <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                </div>
+
+                {loading ? (
+                  <div className="text-center py-12 text-gray-400">
+                    <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
+                    <p>Syncing with Supabase...</p>
+                  </div>
+                ) : (
+                  <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
         <footer className="mt-16">
           <MadeWithDyad />
