@@ -6,21 +6,10 @@ import TransactionForm from '@/components/TransactionForm';
 import TransactionList from '@/components/TransactionList';
 import TransactionFilter from '@/components/TransactionFilter';
 import { MadeWithDyad } from "@/components/made-with-dyad";
-import { db } from "@/lib/firebase";
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  deleteDoc, 
-  doc, 
-  query, 
-  orderBy, 
-  serverTimestamp,
-  Timestamp 
-} from "firebase/firestore";
+import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, AlertTriangle, Flame, Globe } from "lucide-react";
+import { RefreshCw, Database, Zap, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface Transaction {
@@ -44,27 +33,26 @@ const Index = () => {
       setLoading(true);
       setError(null);
       
-      const q = query(collection(db, "ledger_entries"), orderBy("created_at", "desc"));
-      const querySnapshot = await getDocs(q);
-      
-      const formattedData: Transaction[] = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          description: data.description,
-          amount: Number(data.amount),
-          type: data.type as 'credit' | 'debit',
-          date: data.created_at instanceof Timestamp 
-            ? data.created_at.toDate().toISOString() 
-            : new Date().toISOString()
-        };
-      });
+      const { data, error: supabaseError } = await supabase
+        .from('ledger_entries')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (supabaseError) throw supabaseError;
+
+      const formattedData: Transaction[] = (data || []).map(item => ({
+        id: item.id,
+        description: item.description,
+        amount: Number(item.amount),
+        type: item.type as 'credit' | 'debit',
+        date: item.created_at
+      }));
 
       setTransactions(formattedData);
     } catch (err: any) {
-      console.error("Firebase Connection Error:", err);
+      console.error("Supabase Connection Error:", err);
       setError(err.message);
-      showError("Failed to connect to Firebase: " + err.message);
+      showError("Failed to connect to Supabase: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -76,21 +64,28 @@ const Index = () => {
 
   const addTransaction = async (data: Omit<Transaction, 'id' | 'date'>) => {
     try {
-      const docRef = await addDoc(collection(db, "ledger_entries"), {
-        description: data.description,
-        amount: data.amount,
-        type: data.type,
-        created_at: serverTimestamp()
-      });
+      const { data: newEntry, error: supabaseError } = await supabase
+        .from('ledger_entries')
+        .insert([{
+          description: data.description,
+          amount: data.amount,
+          type: data.type
+        }])
+        .select()
+        .single();
 
-      const newEntry: Transaction = {
-        id: docRef.id,
-        ...data,
-        date: new Date().toISOString()
+      if (supabaseError) throw supabaseError;
+
+      const formattedEntry: Transaction = {
+        id: newEntry.id,
+        description: newEntry.description,
+        amount: Number(newEntry.amount),
+        type: newEntry.type as 'credit' | 'debit',
+        date: newEntry.created_at
       };
 
-      setTransactions(prev => [newEntry, ...prev]);
-      showSuccess("Entry saved to Firebase!");
+      setTransactions(prev => [formattedEntry, ...prev]);
+      showSuccess("Entry saved to Supabase!");
     } catch (err: any) {
       showError("Failed to add entry: " + err.message);
     }
@@ -98,9 +93,15 @@ const Index = () => {
 
   const deleteTransaction = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "ledger_entries", id));
+      const { error: supabaseError } = await supabase
+        .from('ledger_entries')
+        .delete()
+        .eq('id', id);
+
+      if (supabaseError) throw supabaseError;
+
       setTransactions(prev => prev.filter(t => t.id !== id));
-      showSuccess("Entry deleted from Firebase");
+      showSuccess("Entry deleted from Supabase");
     } catch (err: any) {
       showError("Failed to delete entry: " + err.message);
     }
@@ -136,40 +137,40 @@ const Index = () => {
       <div className="max-w-4xl mx-auto">
         <header className="text-center mb-12 relative">
           <div className="absolute top-0 right-0">
-            <Badge variant="outline" className={`${error ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-orange-50 text-orange-700 border-orange-200'} flex items-center gap-1 px-3 py-1`}>
-              <Flame size={14} />
-              {error ? 'Disconnected' : 'Firebase Live'}
+            <Badge variant="outline" className={`${error ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} flex items-center gap-1 px-3 py-1`}>
+              <Zap size={14} />
+              {error ? 'Disconnected' : 'Supabase Live'}
             </Badge>
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
             Daily <span className="text-indigo-600">Ledger</span>
           </h1>
-          <p className="text-lg text-gray-500">Real-time financial tracking powered by Firebase.</p>
+          <p className="text-lg text-gray-500">Real-time financial tracking powered by Supabase.</p>
         </header>
 
         {error ? (
           <div className="bg-white border-2 border-rose-100 rounded-3xl p-10 shadow-xl text-center mb-8">
             <div className="bg-rose-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <AlertTriangle className="text-rose-500" size={40} />
+              <Database className="text-rose-500" size={40} />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Firebase Configuration Required</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Supabase Connection Issue</h2>
             <p className="text-gray-600 mb-8 max-w-md mx-auto">
-              Please update the Firebase configuration in <code className="bg-gray-100 px-2 py-1 rounded">src/lib/firebase.ts</code> with your actual project credentials.
+              {error}
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 text-left max-w-lg mx-auto">
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                 <div className="flex items-center gap-2 text-indigo-600 font-semibold mb-1">
-                  <Globe size={16} />
-                  <span>Check Network</span>
+                  <ShieldCheck size={16} />
+                  <span>Check RLS</span>
                 </div>
-                <p className="text-xs text-gray-500">Ensure your network allows connections to Firebase.</p>
+                <p className="text-xs text-gray-500">Ensure Row Level Security policies allow access to the table.</p>
               </div>
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                 <div className="flex items-center gap-2 text-indigo-600 font-semibold mb-1">
-                  <Flame size={16} />
-                  <span>Project Status</span>
+                  <Database size={16} />
+                  <span>Table Status</span>
                 </div>
-                <p className="text-xs text-gray-500">Ensure your Firebase project is active and Firestore is enabled.</p>
+                <p className="text-xs text-gray-500">Ensure the 'ledger_entries' table exists in your public schema.</p>
               </div>
             </div>
             <Button 
@@ -220,7 +221,7 @@ const Index = () => {
                 {loading ? (
                   <div className="text-center py-12 text-gray-400">
                     <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
-                    <p>Syncing with Firebase...</p>
+                    <p>Syncing with Supabase...</p>
                   </div>
                 ) : (
                   <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
