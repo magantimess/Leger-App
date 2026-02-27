@@ -6,6 +6,8 @@ import TransactionForm from '@/components/TransactionForm';
 import TransactionList from '@/components/TransactionList';
 import TransactionFilter from '@/components/TransactionFilter';
 import { MadeWithDyad } from "@/components/made-with-dyad";
+import { supabase } from "@/integrations/supabase/client";
+import { showError } from "@/utils/toast";
 
 interface Transaction {
   id: string;
@@ -17,50 +19,97 @@ interface Transaction {
 
 const Index = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>('all');
 
-  // Load from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('ledger_entries');
-    if (saved) {
-      setTransactions(JSON.parse(saved));
+  // Fetch transactions from Supabase
+  const fetchTransactions = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('ledger_entries')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedData: Transaction[] = data.map(item => ({
+        id: item.id,
+        description: item.description,
+        amount: Number(item.amount),
+        type: item.type as 'credit' | 'debit',
+        date: item.created_at
+      }));
+
+      setTransactions(formattedData);
+    } catch (error: any) {
+      showError("Failed to load entries: " + error.message);
+    } finally {
+      setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('ledger_entries', JSON.stringify(transactions));
-  }, [transactions]);
-
-  const addTransaction = (data: Omit<Transaction, 'id' | 'date'>) => {
-    const newTransaction: Transaction = {
-      ...data,
-      id: Math.random().toString(36).substr(2, 9),
-      date: new Date().toISOString(),
-    };
-    setTransactions([...transactions, newTransaction]);
   };
 
-  const deleteTransaction = (id: string) => {
-    setTransactions(transactions.filter(t => t.id !== id));
+  useEffect(() => {
+    fetchTransactions();
+  }, []);
+
+  const addTransaction = async (data: Omit<Transaction, 'id' | 'date'>) => {
+    try {
+      const { data: newEntry, error } = await supabase
+        .from('ledger_entries')
+        .insert([{
+          description: data.description,
+          amount: data.amount,
+          type: data.type
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const formattedEntry: Transaction = {
+        id: newEntry.id,
+        description: newEntry.description,
+        amount: Number(newEntry.amount),
+        type: newEntry.type as 'credit' | 'debit',
+        date: newEntry.created_at
+      };
+
+      setTransactions([formattedEntry, ...transactions]);
+    } catch (error: any) {
+      showError("Failed to add entry: " + error.message);
+    }
+  };
+
+  const deleteTransaction = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('ledger_entries')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setTransactions(transactions.filter(t => t.id !== id));
+    } catch (error: any) {
+      showError("Failed to delete entry: " + error.message);
+    }
   };
 
   // Filter transactions based on date range AND type
   const filteredTransactions = transactions.filter(t => {
-    // Date filter
     const transactionDate = new Date(t.date).setHours(0, 0, 0, 0);
     const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : -Infinity;
     const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Infinity;
     const matchesDate = transactionDate >= start && transactionDate <= end;
-
-    // Type filter
     const matchesType = typeFilter === 'all' || t.type === typeFilter;
     
     return matchesDate && matchesType;
-  }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  });
 
-  // Totals should always reflect the date range, regardless of the type filter
+  // Totals reflect the date range
   const dateFilteredOnly = transactions.filter(t => {
     const transactionDate = new Date(t.date).setHours(0, 0, 0, 0);
     const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : -Infinity;
@@ -107,7 +156,11 @@ const Index = () => {
                 Showing only {typeFilter} entries
               </p>
             )}
-            <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
+            {loading ? (
+              <div className="text-center py-12 text-gray-400">Loading entries...</div>
+            ) : (
+              <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
+            )}
           </div>
         </div>
 
