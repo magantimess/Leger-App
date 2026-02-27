@@ -7,7 +7,7 @@ import TransactionList from '@/components/TransactionList';
 import TransactionFilter from '@/components/TransactionFilter';
 import { MadeWithDyad } from "@/components/made-with-dyad";
 import { supabase } from "@/integrations/supabase/client";
-import { showError } from "@/utils/toast";
+import { showError, showSuccess } from "@/utils/toast";
 
 interface Transaction {
   id: string;
@@ -24,18 +24,23 @@ const Index = () => {
   const [endDate, setEndDate] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>('all');
 
-  // Fetch transactions from Supabase
   const fetchTransactions = async () => {
     try {
       setLoading(true);
+      console.log("Fetching transactions from Supabase...");
       const { data, error } = await supabase
         .from('ledger_entries')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase fetch error:", error);
+        throw error;
+      }
 
-      const formattedData: Transaction[] = data.map(item => ({
+      console.log("Fetched data:", data);
+
+      const formattedData: Transaction[] = (data || []).map(item => ({
         id: item.id,
         description: item.description,
         amount: Number(item.amount),
@@ -45,7 +50,7 @@ const Index = () => {
 
       setTransactions(formattedData);
     } catch (error: any) {
-      showError("Failed to load entries: " + error.message);
+      showError("Failed to load entries: " + (error.message || "Unknown error"));
     } finally {
       setLoading(false);
     }
@@ -57,6 +62,7 @@ const Index = () => {
 
   const addTransaction = async (data: Omit<Transaction, 'id' | 'date'>) => {
     try {
+      console.log("Adding transaction to Supabase:", data);
       const { data: newEntry, error } = await supabase
         .from('ledger_entries')
         .insert([{
@@ -67,7 +73,12 @@ const Index = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase insert error:", error);
+        throw error;
+      }
+
+      console.log("Inserted entry:", newEntry);
 
       const formattedEntry: Transaction = {
         id: newEntry.id,
@@ -77,28 +88,33 @@ const Index = () => {
         date: newEntry.created_at
       };
 
-      setTransactions([formattedEntry, ...transactions]);
+      setTransactions(prev => [formattedEntry, ...prev]);
+      showSuccess("Entry saved to database!");
     } catch (error: any) {
-      showError("Failed to add entry: " + error.message);
+      showError("Failed to add entry: " + (error.message || "Unknown error"));
     }
   };
 
   const deleteTransaction = async (id: string) => {
     try {
+      console.log("Deleting transaction from Supabase:", id);
       const { error } = await supabase
         .from('ledger_entries')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase delete error:", error);
+        throw error;
+      }
 
-      setTransactions(transactions.filter(t => t.id !== id));
+      setTransactions(prev => prev.filter(t => t.id !== id));
+      showSuccess("Entry deleted from database");
     } catch (error: any) {
-      showError("Failed to delete entry: " + error.message);
+      showError("Failed to delete entry: " + (error.message || "Unknown error"));
     }
   };
 
-  // Filter transactions based on date range AND type
   const filteredTransactions = transactions.filter(t => {
     const transactionDate = new Date(t.date).setHours(0, 0, 0, 0);
     const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : -Infinity;
@@ -109,7 +125,6 @@ const Index = () => {
     return matchesDate && matchesType;
   });
 
-  // Totals reflect the date range
   const dateFilteredOnly = transactions.filter(t => {
     const transactionDate = new Date(t.date).setHours(0, 0, 0, 0);
     const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : -Infinity;
@@ -157,7 +172,7 @@ const Index = () => {
               </p>
             )}
             {loading ? (
-              <div className="text-center py-12 text-gray-400">Loading entries...</div>
+              <div className="text-center py-12 text-gray-400">Loading entries from database...</div>
             ) : (
               <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
             )}
