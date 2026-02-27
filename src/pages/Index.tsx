@@ -9,8 +9,9 @@ import { MadeWithDyad } from "@/components/made-with-dyad";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Database, Zap, ShieldCheck } from "lucide-react";
+import { RefreshCw, Database, Zap, ShieldCheck, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface Transaction {
   id: string;
@@ -38,21 +39,22 @@ const Index = () => {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (supabaseError) throw supabaseError;
+      if (supabaseError) {
+        console.error("Supabase Fetch Error:", supabaseError);
+        throw new Error(supabaseError.message);
+      }
 
       const formattedData: Transaction[] = (data || []).map(item => ({
         id: item.id,
         description: item.description,
-        amount: Number(item.amount),
+        amount: parseFloat(item.amount.toString()),
         type: item.type as 'credit' | 'debit',
         date: item.created_at
       }));
 
       setTransactions(formattedData);
     } catch (err: any) {
-      console.error("Supabase Connection Error:", err);
-      setError(err.message);
-      showError("Failed to connect to Supabase: " + err.message);
+      setError(err.message || "An unknown error occurred while fetching data.");
     } finally {
       setLoading(false);
     }
@@ -62,30 +64,33 @@ const Index = () => {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  const addTransaction = async (data: Omit<Transaction, 'id' | 'date'>) => {
+  const addTransaction = async (formData: { description: string; amount: number; type: 'credit' | 'debit' }) => {
     try {
       const { data: newEntry, error: supabaseError } = await supabase
         .from('ledger_entries')
         .insert([{
-          description: data.description,
-          amount: data.amount,
-          type: data.type
+          description: formData.description,
+          amount: formData.amount,
+          type: formData.type
         }])
         .select()
         .single();
 
-      if (supabaseError) throw supabaseError;
+      if (supabaseError) {
+        console.error("Supabase Insert Error:", supabaseError);
+        throw new Error(supabaseError.message);
+      }
 
       const formattedEntry: Transaction = {
         id: newEntry.id,
         description: newEntry.description,
-        amount: Number(newEntry.amount),
+        amount: parseFloat(newEntry.amount.toString()),
         type: newEntry.type as 'credit' | 'debit',
         date: newEntry.created_at
       };
 
       setTransactions(prev => [formattedEntry, ...prev]);
-      showSuccess("Entry saved to Supabase!");
+      showSuccess("Entry saved successfully!");
     } catch (err: any) {
       showError("Failed to add entry: " + err.message);
     }
@@ -98,10 +103,13 @@ const Index = () => {
         .delete()
         .eq('id', id);
 
-      if (supabaseError) throw supabaseError;
+      if (supabaseError) {
+        console.error("Supabase Delete Error:", supabaseError);
+        throw new Error(supabaseError.message);
+      }
 
       setTransactions(prev => prev.filter(t => t.id !== id));
-      showSuccess("Entry deleted from Supabase");
+      showSuccess("Entry deleted successfully");
     } catch (err: any) {
       showError("Failed to delete entry: " + err.message);
     }
@@ -139,7 +147,7 @@ const Index = () => {
           <div className="absolute top-0 right-0">
             <Badge variant="outline" className={`${error ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} flex items-center gap-1 px-3 py-1`}>
               <Zap size={14} />
-              {error ? 'Disconnected' : 'Supabase Live'}
+              {error ? 'Connection Error' : 'Supabase Connected'}
             </Badge>
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
@@ -148,40 +156,28 @@ const Index = () => {
           <p className="text-lg text-gray-500">Real-time financial tracking powered by Supabase.</p>
         </header>
 
-        {error ? (
-          <div className="bg-white border-2 border-rose-100 rounded-3xl p-10 shadow-xl text-center mb-8">
-            <div className="bg-rose-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Database className="text-rose-500" size={40} />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Supabase Connection Issue</h2>
-            <p className="text-gray-600 mb-8 max-w-md mx-auto">
-              {error}
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 text-left max-w-lg mx-auto">
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                <div className="flex items-center gap-2 text-indigo-600 font-semibold mb-1">
-                  <ShieldCheck size={16} />
-                  <span>Check RLS</span>
-                </div>
-                <p className="text-xs text-gray-500">Ensure Row Level Security policies allow access to the table.</p>
+        {error && (
+          <Alert variant="destructive" className="mb-8 bg-rose-50 border-rose-200 text-rose-900 rounded-2xl">
+            <AlertCircle className="h-5 w-5" />
+            <AlertTitle className="font-bold">Database Error</AlertTitle>
+            <AlertDescription className="mt-2">
+              <p className="mb-4">{error}</p>
+              <div className="flex flex-wrap gap-3">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={fetchTransactions}
+                  className="bg-white border-rose-200 hover:bg-rose-100 text-rose-700"
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                  Try Again
+                </Button>
               </div>
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                <div className="flex items-center gap-2 text-indigo-600 font-semibold mb-1">
-                  <Database size={16} />
-                  <span>Table Status</span>
-                </div>
-                <p className="text-xs text-gray-500">Ensure the 'ledger_entries' table exists in your public schema.</p>
-              </div>
-            </div>
-            <Button 
-              onClick={fetchTransactions} 
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-6 rounded-2xl text-lg font-semibold transition-all"
-            >
-              <RefreshCw className={`mr-2 ${loading ? 'animate-spin' : ''}`} size={20} />
-              Retry Connection
-            </Button>
-          </div>
-        ) : (
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!error && (
           <>
             <Summary 
               totalCredit={totalCredit} 
@@ -201,27 +197,23 @@ const Index = () => {
               
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  {typeFilter !== 'all' && (
-                    <p className="text-sm font-medium text-indigo-600">
-                      Showing only {typeFilter} entries
-                    </p>
-                  )}
+                  <h2 className="text-xl font-bold text-gray-800">Transactions</h2>
                   <Button 
-                    variant="outline" 
+                    variant="ghost" 
                     size="sm" 
                     onClick={fetchTransactions} 
                     disabled={loading}
-                    className="ml-auto rounded-full"
+                    className="rounded-full hover:bg-indigo-50 text-indigo-600"
                   >
                     <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                    Refresh
+                    Sync
                   </Button>
                 </div>
 
-                {loading ? (
-                  <div className="text-center py-12 text-gray-400">
+                {loading && transactions.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200">
                     <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
-                    <p>Syncing with Supabase...</p>
+                    <p>Loading your ledger...</p>
                   </div>
                 ) : (
                   <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
