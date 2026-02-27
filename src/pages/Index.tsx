@@ -9,7 +9,8 @@ import { MadeWithDyad } from "@/components/made-with-dyad";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, AlertCircle } from "lucide-react";
+import { RefreshCw, WifiOff, Database } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface Transaction {
   id: string;
@@ -22,16 +23,28 @@ interface Transaction {
 const Index = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isLocalMode, setIsLocalMode] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>('all');
 
+  const loadLocalData = () => {
+    const localData = localStorage.getItem('ledger_entries');
+    if (localData) {
+      setTransactions(JSON.parse(localData));
+    }
+    setIsLocalMode(true);
+  };
+
+  const saveLocalData = (data: Transaction[]) => {
+    localStorage.setItem('ledger_entries', JSON.stringify(data));
+    setTransactions(data);
+  };
+
   const fetchTransactions = useCallback(async () => {
     try {
       setLoading(true);
-      setError(null);
-      console.log("Attempting to fetch transactions from Supabase...");
+      console.log("Attempting to fetch from Supabase...");
       
       const { data, error: supabaseError } = await supabase
         .from('ledger_entries')
@@ -49,14 +62,14 @@ const Index = () => {
       }));
 
       setTransactions(formattedData);
-      console.log("Successfully fetched transactions.");
+      setIsLocalMode(false);
+      console.log("Connected to Supabase successfully.");
     } catch (err: any) {
-      const msg = err.message === 'Failed to fetch' 
-        ? "Connection timed out. Please check your internet or if Supabase is blocked." 
-        : err.message;
-      setError(msg);
-      showError(msg);
-      console.error("Fetch error:", err);
+      console.warn("Supabase connection failed, falling back to local storage:", err.message);
+      loadLocalData();
+      if (err.message === 'Failed to fetch') {
+        showError("Network timeout. Using Local Storage mode.");
+      }
     } finally {
       setLoading(false);
     }
@@ -67,6 +80,18 @@ const Index = () => {
   }, [fetchTransactions]);
 
   const addTransaction = async (data: Omit<Transaction, 'id' | 'date'>) => {
+    if (isLocalMode) {
+      const newEntry: Transaction = {
+        ...data,
+        id: crypto.randomUUID(),
+        date: new Date().toISOString()
+      };
+      const updated = [newEntry, ...transactions];
+      saveLocalData(updated);
+      showSuccess("Entry saved locally!");
+      return;
+    }
+
     try {
       const { data: newEntry, error: insertError } = await supabase
         .from('ledger_entries')
@@ -92,10 +117,19 @@ const Index = () => {
       showSuccess("Entry saved to database!");
     } catch (err: any) {
       showError("Failed to add entry: " + err.message);
+      // If it fails, offer to save locally
+      setIsLocalMode(true);
     }
   };
 
   const deleteTransaction = async (id: string) => {
+    if (isLocalMode) {
+      const updated = transactions.filter(t => t.id !== id);
+      saveLocalData(updated);
+      showSuccess("Entry deleted locally");
+      return;
+    }
+
     try {
       const { error: deleteError } = await supabase
         .from('ledger_entries')
@@ -139,7 +173,20 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
-        <header className="text-center mb-12">
+        <header className="text-center mb-12 relative">
+          <div className="absolute top-0 right-0">
+            {isLocalMode ? (
+              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1 px-3 py-1">
+                <WifiOff size={14} />
+                Local Mode
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-1 px-3 py-1">
+                <Database size={14} />
+                Connected
+              </Badge>
+            )}
+          </div>
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
             Daily <span className="text-indigo-600">Ledger</span>
           </h1>
@@ -164,11 +211,18 @@ const Index = () => {
           
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              {typeFilter !== 'all' && (
-                <p className="text-sm font-medium text-indigo-600">
-                  Showing only {typeFilter} entries
-                </p>
-              )}
+              <div className="flex flex-col gap-1">
+                {typeFilter !== 'all' && (
+                  <p className="text-sm font-medium text-indigo-600">
+                    Showing only {typeFilter} entries
+                  </p>
+                )}
+                {isLocalMode && (
+                  <p className="text-xs text-amber-600 font-medium">
+                    Data is being saved to your browser locally.
+                  </p>
+                )}
+              </div>
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -177,23 +231,14 @@ const Index = () => {
                 className="ml-auto rounded-full"
               >
                 <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
+                {isLocalMode ? 'Retry Connection' : 'Refresh'}
               </Button>
             </div>
 
-            {error ? (
-              <div className="bg-rose-50 border border-rose-100 rounded-2xl p-8 text-center">
-                <AlertCircle className="mx-auto text-rose-500 mb-4" size={48} />
-                <h3 className="text-lg font-semibold text-rose-900 mb-2">Connection Error</h3>
-                <p className="text-rose-700 mb-6">{error}</p>
-                <Button onClick={fetchTransactions} className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl">
-                  Try Again
-                </Button>
-              </div>
-            ) : loading ? (
+            {loading ? (
               <div className="text-center py-12 text-gray-400">
                 <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
-                <p>Connecting to database...</p>
+                <p>Checking connection...</p>
               </div>
             ) : (
               <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
