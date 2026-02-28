@@ -7,13 +7,11 @@ import TransactionForm from '@/components/TransactionForm';
 import TransactionList from '@/components/TransactionList';
 import TransactionFilter from '@/components/TransactionFilter';
 import { MadeWithDyad } from "@/components/made-with-dyad";
-import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, Timestamp, where } from "firebase/firestore";
+import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Database, Settings, LogOut, User as UserIcon, ShieldCheck } from "lucide-react";
+import { RefreshCw, Database, LogOut, User as UserIcon, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAuth } from '@/components/AuthProvider';
 
 interface Transaction {
@@ -29,7 +27,6 @@ const Index = () => {
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>('all');
@@ -39,35 +36,26 @@ const Index = () => {
     
     try {
       setLoading(true);
-      setError(null);
       
-      if (db.app.options.apiKey === "YOUR_API_KEY") {
-        throw new Error("Firebase is not configured. Please update src/lib/firebase.ts with your credentials.");
-      }
+      const { data, error } = await supabase
+        .from('ledger_entries')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
 
-      const q = query(
-        collection(db, "ledger_entries"), 
-        where("user_id", "==", user.uid),
-        orderBy("created_at", "desc")
-      );
-      
-      const querySnapshot = await getDocs(q);
-      
-      const formattedData: Transaction[] = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          description: data.description,
-          amount: data.amount,
-          type: data.type,
-          date: data.created_at?.toDate().toISOString() || new Date().toISOString()
-        };
-      });
+      const formattedData: Transaction[] = data.map(item => ({
+        id: item.id,
+        description: item.description,
+        amount: item.amount,
+        type: item.type,
+        date: item.created_at
+      }));
 
       setTransactions(formattedData);
     } catch (err: any) {
-      console.error("Firebase Error:", err);
-      setError(err.message);
+      console.error("Supabase Error:", err);
+      showError("Failed to fetch entries.");
     } finally {
       setLoading(false);
     }
@@ -81,20 +69,25 @@ const Index = () => {
     if (!user) return;
 
     try {
-      const docRef = await addDoc(collection(db, "ledger_entries"), {
-        description: formData.description,
-        amount: formData.amount,
-        type: formData.type,
-        created_at: Timestamp.now(),
-        user_id: user.uid
-      });
+      const { data, error } = await supabase
+        .from('ledger_entries')
+        .insert([{
+          description: formData.description,
+          amount: formData.amount,
+          type: formData.type,
+          user_id: user.id
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
 
       const newEntry: Transaction = {
-        id: docRef.id,
-        description: formData.description,
-        amount: formData.amount,
-        type: formData.type,
-        date: new Date().toISOString()
+        id: data.id,
+        description: data.description,
+        amount: data.amount,
+        type: data.type,
+        date: data.created_at
       };
 
       setTransactions(prev => [newEntry, ...prev]);
@@ -106,7 +99,13 @@ const Index = () => {
 
   const deleteTransaction = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "ledger_entries", id));
+      const { error } = await supabase
+        .from('ledger_entries')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
       setTransactions(prev => prev.filter(t => t.id !== id));
       showSuccess("Entry removed.");
     } catch (err: any) {
@@ -150,7 +149,7 @@ const Index = () => {
             <div className="text-left">
               <p className="text-xs text-gray-500 font-medium">Logged in as</p>
               <p className="text-sm font-bold text-gray-900 truncate max-w-[150px]">
-                {user?.displayName || user?.email}
+                {user?.user_metadata?.username || user?.email}
               </p>
             </div>
             {role === 'admin' && (
@@ -182,9 +181,9 @@ const Index = () => {
 
         <header className="text-center mb-12 relative">
           <div className="absolute top-0 right-0 hidden md:block">
-            <Badge variant="outline" className={`${error ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-orange-50 text-orange-700 border-orange-200'} flex items-center gap-1 px-3 py-1`}>
+            <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 flex items-center gap-1 px-3 py-1">
               <Database size={14} />
-              {error ? 'Config Required' : 'Firebase Active'}
+              Supabase Active
             </Badge>
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
@@ -193,62 +192,47 @@ const Index = () => {
           <p className="text-lg text-gray-500">Secure financial tracking for your organization.</p>
         </header>
 
-        {error && error.includes("Firebase is not configured") && (
-          <Alert className="mb-8 bg-orange-50 border-orange-200 text-orange-900 rounded-2xl">
-            <Settings className="h-5 w-5" />
-            <AlertTitle className="font-bold">Firebase Setup Required</AlertTitle>
-            <AlertDescription className="mt-2">
-              <p className="mb-4">To use Firebase, you must add your project credentials to <code className="bg-orange-100 px-1 rounded">src/lib/firebase.ts</code>.</p>
-              <p className="text-sm">You can find these in your Firebase Console under Project Settings, then General, then Your apps.</p>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {!error && (
-          <>
-            <Summary 
-              totalCredit={totalCredit} 
-              totalDebit={totalDebit} 
-              activeFilter={typeFilter}
-              onFilterChange={setTypeFilter}
-            />
-            
-            <div className="grid grid-cols-1 gap-8">
-              <TransactionForm onAdd={addTransaction} />
-              <TransactionFilter 
-                startDate={startDate} 
-                endDate={endDate} 
-                onStartDateChange={setStartDate} 
-                onEndDateChange={setEndDate} 
-              />
-              
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-gray-800">Transactions</h2>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={fetchTransactions} 
-                    disabled={loading}
-                    className="rounded-full hover:bg-indigo-50 text-indigo-600"
-                  >
-                    <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                    Sync
-                  </Button>
-                </div>
-
-                {loading && transactions.length === 0 ? (
-                  <div className="text-center py-12 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200">
-                    <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
-                    <p>Connecting to Firebase...</p>
-                  </div>
-                ) : (
-                  <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
-                )}
-              </div>
+        <Summary 
+          totalCredit={totalCredit} 
+          totalDebit={totalDebit} 
+          activeFilter={typeFilter}
+          onFilterChange={setTypeFilter}
+        />
+        
+        <div className="grid grid-cols-1 gap-8">
+          <TransactionForm onAdd={addTransaction} />
+          <TransactionFilter 
+            startDate={startDate} 
+            endDate={endDate} 
+            onStartDateChange={setStartDate} 
+            onEndDateChange={setEndDate} 
+          />
+          
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-800">Transactions</h2>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={fetchTransactions} 
+                disabled={loading}
+                className="rounded-full hover:bg-indigo-50 text-indigo-600"
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Sync
+              </Button>
             </div>
-          </>
-        )}
+
+            {loading && transactions.length === 0 ? (
+              <div className="text-center py-12 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200">
+                <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
+                <p>Connecting to Supabase...</p>
+              </div>
+            ) : (
+              <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
+            )}
+          </div>
+        </div>
 
         <footer className="mt-16">
           <MadeWithDyad />

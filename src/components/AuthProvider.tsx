@@ -1,12 +1,12 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { Session, User } from '@supabase/supabase-js';
+import { supabase } from "@/integrations/supabase/client";
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   role: 'admin' | 'user' | null;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -16,42 +16,58 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<'admin' | 'user' | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      
-      if (firebaseUser) {
-        try {
-          const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-          if (userDoc.exists()) {
-            setRole(userDoc.data().role || 'user');
-          } else {
-            // Default role if no doc exists (e.g., first login)
-            setRole('user');
-          }
-        } catch (error) {
-          console.error("Error fetching user role:", error);
-          setRole('user');
-        }
-      } else {
-        setRole(null);
-      }
-      
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) fetchUserRole(session.user.id);
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchUserRole(session.user.id);
+      } else {
+        setRole(null);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
+  const fetchUserRole = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single();
+      
+      if (data && !error) {
+        setRole(data.role);
+      } else {
+        setRole('user');
+      }
+    } catch (err) {
+      setRole('user');
+    }
+  };
+
   const signOut = async () => {
-    await firebaseSignOut(auth);
+    await supabase.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, signOut }}>
+    <AuthContext.Provider value={{ user, session, role, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );
