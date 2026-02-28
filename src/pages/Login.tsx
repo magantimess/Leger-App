@@ -19,7 +19,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
   
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
   useEffect(() => {
@@ -31,6 +31,9 @@ const Login = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    // Map username to a valid email format for Firebase
+    const email = `${username.toLowerCase()}@ledger.local`;
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
@@ -44,30 +47,30 @@ const Login = () => {
 
   const handleSeedAdmin = async () => {
     setSeedLoading(true);
-    const adminEmail = "madhu2131@ledger.com";
+    const adminUsername = "Madhu2131";
+    const adminEmail = `${adminUsername.toLowerCase()}@ledger.local`;
     const adminPass = "Madhu2131";
-    const adminName = "Madhu2131";
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPass);
       const newUser = userCredential.user;
 
-      await updateProfile(newUser, { displayName: adminName });
+      await updateProfile(newUser, { displayName: adminUsername });
 
       await setDoc(doc(db, "users", newUser.uid), {
-        email: adminEmail,
-        displayName: adminName,
+        username: adminUsername,
+        displayName: adminUsername,
         role: 'admin',
         createdAt: new Date().toISOString()
       });
 
       showSuccess("Admin account created! You can now log in.");
-      setEmail(adminEmail);
+      setUsername(adminUsername);
       setPassword(adminPass);
     } catch (error: any) {
       if (error.code === 'auth/email-already-in-use') {
         showError("Admin account already exists. Try logging in.");
-        setEmail(adminEmail);
+        setUsername(adminUsername);
         setPassword(adminPass);
       } else {
         showError(error.message);
@@ -92,13 +95,13 @@ const Login = () => {
         <CardContent className="px-8 pb-8">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="username">Username</Label>
               <Input 
-                id="email" 
-                type="email" 
-                placeholder="name@example.com" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="username" 
+                type="text" 
+                placeholder="Enter your username" 
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="rounded-xl"
                 required
               />

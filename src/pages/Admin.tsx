@@ -20,7 +20,7 @@ const Admin = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
@@ -42,6 +42,9 @@ const Admin = () => {
     e.preventDefault();
     setLoading(true);
 
+    // Map username to a valid email format for Firebase
+    const email = `${username.toLowerCase()}@ledger.local`;
+
     // We use a secondary Firebase app instance to create the user 
     // so the current admin session isn't automatically logged out.
     const secondaryApp = initializeApp(firebaseConfig, "Secondary");
@@ -55,7 +58,7 @@ const Admin = () => {
 
       // Create user document in Firestore with role
       await setDoc(doc(db, "users", newUser.uid), {
-        email,
+        username,
         displayName: name,
         role: userRole,
         createdAt: new Date().toISOString()
@@ -64,8 +67,8 @@ const Admin = () => {
       // Sign out the secondary app session immediately
       await signOut(secondaryAuth);
       
-      showSuccess(`User ${name} created successfully!`);
-      setEmail('');
+      showSuccess(`User ${username} created successfully!`);
+      setUsername('');
       setPassword('');
       setName('');
       setUserRole('user');
@@ -108,12 +111,12 @@ const Admin = () => {
             <form onSubmit={handleAddUser} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
+                  <Label htmlFor="username">Username</Label>
                   <Input 
-                    id="name" 
-                    placeholder="John Doe" 
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    id="username" 
+                    placeholder="johndoe" 
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     className="rounded-xl"
                     required
                   />
@@ -133,13 +136,12 @@ const Admin = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="name">Display Name</Label>
                 <Input 
-                  id="email" 
-                  type="email" 
-                  placeholder="user@example.com" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="name" 
+                  placeholder="John Doe" 
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="rounded-xl"
                   required
                 />
