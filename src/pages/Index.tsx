@@ -164,6 +164,13 @@ const Index = () => {
         </div>
 
         <header className="text-center mb-12 relative">
+          <div className="mx-auto mb-6 flex justify-center">
+            <img 
+              src="https://wskwblytqmyjqcgsxeky.supabase.co/storage/v1/object/public/project_assets/maganti_logo.png" 
+              alt="MagantiMess Logo" 
+              className="w-24 h-24 object-contain rounded-full shadow-md border-2 border-indigo-500/10"
+            />
+          </div>
           <div className="absolute top-0 right-0 hidden md:block">
             <Badge variant="outline" className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 flex items-center gap-1 px-3 py-1">
               <Database size={14} />

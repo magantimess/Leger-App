@@ -9,8 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Wallet, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const Login = () => {
   const { user, signIn } = useAuth();
@@ -62,11 +63,19 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 transition-colors duration-300">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 transition-colors duration-300 relative">
+      <div className="absolute top-8 right-8">
+        <ThemeToggle />
+      </div>
+      
       <Card className="w-full max-w-md border-none shadow-2xl bg-card/80 backdrop-blur-md rounded-3xl overflow-hidden">
         <CardHeader className="text-center pt-10 pb-6">
-          <div className="mx-auto bg-indigo-100 dark:bg-indigo-900/30 w-16 h-16 rounded-2xl flex items-center justify-center mb-4">
-            <Wallet className="text-indigo-600 dark:text-indigo-400" size={32} />
+          <div className="mx-auto mb-6">
+            <img 
+              src="https://wskwblytqmyjqcgsxeky.supabase.co/storage/v1/object/public/project_assets/maganti_logo.png" 
+              alt="MagantiMess Logo" 
+              className="w-32 h-32 object-contain rounded-full shadow-lg border-4 border-indigo-500/20"
+            />
           </div>
           <CardTitle className="text-3xl font-bold text-foreground">MagantiMess Ledger</CardTitle>
           <CardDescription className="text-muted-foreground mt-2">
