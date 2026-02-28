@@ -6,11 +6,10 @@ import TransactionForm from '@/components/TransactionForm';
 import TransactionList from '@/components/TransactionList';
 import TransactionFilter from '@/components/TransactionFilter';
 import { MadeWithDyad } from "@/components/made-with-dyad";
-import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, Timestamp } from "firebase/firestore";
+import { mongoClient, isMongoConfigured } from "@/lib/mongodb";
 import { showError, showSuccess } from "@/utils/toast";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Database, Zap, AlertCircle, Settings } from "lucide-react";
+import { RefreshCw, Database, AlertCircle, Settings, Server } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -35,28 +34,23 @@ const Index = () => {
       setLoading(true);
       setError(null);
       
-      // Check if Firebase is configured
-      if (db.app.options.apiKey === "YOUR_API_KEY") {
-        throw new Error("Firebase is not configured. Please update src/lib/firebase.ts with your credentials.");
+      if (!isMongoConfigured()) {
+        throw new Error("MongoDB is not configured. Please update src/lib/mongodb.ts with your Atlas Data API credentials.");
       }
 
-      const q = query(collection(db, "ledger_entries"), orderBy("created_at", "desc"));
-      const querySnapshot = await getDocs(q);
+      const documents = await mongoClient.find();
       
-      const formattedData: Transaction[] = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          description: data.description,
-          amount: data.amount,
-          type: data.type,
-          date: data.created_at?.toDate().toISOString() || new Date().toISOString()
-        };
-      });
+      const formattedData: Transaction[] = (documents || []).map((doc: any) => ({
+        id: doc._id,
+        description: doc.description,
+        amount: doc.amount,
+        type: doc.type,
+        date: doc.created_at
+      }));
 
       setTransactions(formattedData);
     } catch (err: any) {
-      console.error("Firebase Error:", err);
+      console.error("MongoDB Error:", err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -69,15 +63,10 @@ const Index = () => {
 
   const addTransaction = async (formData: { description: string; amount: number; type: 'credit' | 'debit' }) => {
     try {
-      const docRef = await addDoc(collection(db, "ledger_entries"), {
-        description: formData.description,
-        amount: formData.amount,
-        type: formData.type,
-        created_at: Timestamp.now()
-      });
+      const insertedId = await mongoClient.insertOne(formData);
 
       const newEntry: Transaction = {
-        id: docRef.id,
+        id: insertedId,
         description: formData.description,
         amount: formData.amount,
         type: formData.type,
@@ -85,15 +74,15 @@ const Index = () => {
       };
 
       setTransactions(prev => [newEntry, ...prev]);
-      showSuccess("Entry saved to Firebase!");
+      showSuccess("Entry saved to MongoDB!");
     } catch (err: any) {
-      showError("Firebase Error: " + err.message);
+      showError("MongoDB Error: " + err.message);
     }
   };
 
   const deleteTransaction = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "ledger_entries", id));
+      await mongoClient.deleteOne(id);
       setTransactions(prev => prev.filter(t => t.id !== id));
       showSuccess("Entry removed.");
     } catch (err: any) {
@@ -131,29 +120,34 @@ const Index = () => {
       <div className="max-w-4xl mx-auto">
         <header className="text-center mb-12 relative">
           <div className="absolute top-0 right-0">
-            <Badge variant="outline" className={`${error ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-blue-50 text-blue-700 border-blue-200'} flex items-center gap-1 px-3 py-1`}>
-              <Database size={14} />
-              {error ? 'Config Required' : 'Firebase Active'}
+            <Badge variant="outline" className={`${error ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-green-50 text-green-700 border-green-200'} flex items-center gap-1 px-3 py-1`}>
+              <Server size={14} />
+              {error ? 'Config Required' : 'MongoDB Atlas Active'}
             </Badge>
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
             Daily <span className="text-indigo-600">Ledger</span>
           </h1>
-          <p className="text-lg text-gray-500">NoSQL financial tracking powered by Firebase.</p>
+          <p className="text-lg text-gray-500">NoSQL financial tracking powered by MongoDB Atlas.</p>
         </header>
 
-        {error && error.includes("Firebase is not configured") && (
-          <Alert className="mb-8 bg-blue-50 border-blue-200 text-blue-900 rounded-2xl">
+        {error && error.includes("MongoDB is not configured") && (
+          <Alert className="mb-8 bg-green-50 border-green-200 text-green-900 rounded-2xl">
             <Settings className="h-5 w-5" />
-            <AlertTitle className="font-bold">Setup Required</AlertTitle>
+            <AlertTitle className="font-bold">MongoDB Setup Required</AlertTitle>
             <AlertDescription className="mt-2">
-              <p className="mb-4">To use Firebase, you must add your project credentials to <code className="bg-blue-100 px-1 rounded">src/lib/firebase.ts</code>.</p>
-              <p className="text-sm">You can find these in your Firebase Console under Project Settings.</p>
+              <p className="mb-4">To use MongoDB, you must enable the <strong>Data API</strong> in your MongoDB Atlas dashboard and add the credentials to <code className="bg-green-100 px-1 rounded">src/lib/mongodb.ts</code>.</p>
+              <ol className="list-decimal list-inside space-y-1 text-sm">
+                <li>Go to Atlas Dashboard > Data API</li>
+                <li>Enable Data API for your cluster</li>
+                <li>Generate an API Key</li>
+                <li>Copy the App ID and API Key into the code</li>
+              </ol>
             </AlertDescription>
           </Alert>
         )}
 
-        {error && !error.includes("Firebase is not configured") && (
+        {error && !error.includes("MongoDB is not configured") && (
           <Alert variant="destructive" className="mb-8 bg-rose-50 border-rose-200 text-rose-900 rounded-2xl">
             <AlertCircle className="h-5 w-5" />
             <AlertTitle className="font-bold">Database Error</AlertTitle>
@@ -208,7 +202,7 @@ const Index = () => {
                 {loading && transactions.length === 0 ? (
                   <div className="text-center py-12 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200">
                     <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
-                    <p>Loading...</p>
+                    <p>Loading from Atlas...</p>
                   </div>
                 ) : (
                   <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
