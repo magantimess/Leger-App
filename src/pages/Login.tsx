@@ -57,6 +57,7 @@ const Login = () => {
 
       await updateProfile(newUser, { displayName: adminUsername });
 
+      // This explicitly sets the 'admin' role in the Firestore 'users' collection
       await setDoc(doc(db, "users", newUser.uid), {
         username: adminUsername,
         displayName: adminUsername,
