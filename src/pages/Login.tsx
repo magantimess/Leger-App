@@ -72,7 +72,7 @@ const Login = () => {
         <CardHeader className="text-center pt-10 pb-6">
           <div className="mx-auto mb-6">
             <img 
-              src="/maganti_logo.png" 
+              src="/logo.jpeg" 
               alt="MagantiMess Logo" 
               className="w-32 h-32 object-contain rounded-full shadow-lg border-4 border-indigo-500/20"
             />
