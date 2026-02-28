@@ -2,20 +2,22 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { useAuth } from '@/components/AuthProvider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Wallet, Loader2, ShieldAlert } from 'lucide-react';
+import { Wallet, Loader2, ShieldAlert, UserPlus } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 
 const Login = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [seedLoading, setSeedLoading] = useState(false);
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,6 +39,41 @@ const Login = () => {
       showError("Invalid credentials. Please contact your administrator.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSeedAdmin = async () => {
+    setSeedLoading(true);
+    const adminEmail = "madhu2131@ledger.com";
+    const adminPass = "Madhu2131";
+    const adminName = "Madhu2131";
+
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPass);
+      const newUser = userCredential.user;
+
+      await updateProfile(newUser, { displayName: adminName });
+
+      await setDoc(doc(db, "users", newUser.uid), {
+        email: adminEmail,
+        displayName: adminName,
+        role: 'admin',
+        createdAt: new Date().toISOString()
+      });
+
+      showSuccess("Admin account created! You can now log in.");
+      setEmail(adminEmail);
+      setPassword(adminPass);
+    } catch (error: any) {
+      if (error.code === 'auth/email-already-in-use') {
+        showError("Admin account already exists. Try logging in.");
+        setEmail(adminEmail);
+        setPassword(adminPass);
+      } else {
+        showError(error.message);
+      }
+    } finally {
+      setSeedLoading(false);
     }
   };
 
@@ -87,11 +124,23 @@ const Login = () => {
             </Button>
           </form>
           
-          <div className="mt-8 p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-3">
-            <ShieldAlert className="text-amber-600 shrink-0" size={20} />
-            <p className="text-xs text-amber-800 leading-relaxed">
-              Public registration is disabled. Only an administrator can create new accounts.
-            </p>
+          <div className="mt-8 space-y-4">
+            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-3">
+              <ShieldAlert className="text-amber-600 shrink-0" size={20} />
+              <p className="text-xs text-amber-800 leading-relaxed">
+                Public registration is disabled. Only an administrator can create new accounts.
+              </p>
+            </div>
+
+            <Button 
+              variant="outline" 
+              onClick={handleSeedAdmin}
+              disabled={seedLoading}
+              className="w-full rounded-xl border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+            >
+              {seedLoading ? <Loader2 className="animate-spin mr-2" size={16} /> : <UserPlus className="mr-2" size={16} />}
+              Setup Initial Admin (Madhu2131)
+            </Button>
           </div>
         </CardContent>
       </Card>
