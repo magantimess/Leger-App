@@ -7,10 +7,10 @@ import TransactionList from '@/components/TransactionList';
 import TransactionFilter from '@/components/TransactionFilter';
 import { MadeWithDyad } from "@/components/made-with-dyad";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, Timestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, Timestamp, where } from "firebase/firestore";
 import { showError, showSuccess } from "@/utils/toast";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Database, AlertCircle, Settings, LogOut, User } from "lucide-react";
+import { RefreshCw, Database, AlertCircle, Settings, LogOut, User as UserIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAuth } from '@/components/AuthProvider';
@@ -33,6 +33,8 @@ const Index = () => {
   const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>('all');
 
   const fetchTransactions = useCallback(async () => {
+    if (!user) return;
+    
     try {
       setLoading(true);
       setError(null);
@@ -41,7 +43,13 @@ const Index = () => {
         throw new Error("Firebase is not configured. Please update src/lib/firebase.ts with your credentials.");
       }
 
-      const q = query(collection(db, "ledger_entries"), orderBy("created_at", "desc"));
+      // Filter by user_id to ensure users only see their own data
+      const q = query(
+        collection(db, "ledger_entries"), 
+        where("user_id", "==", user.uid),
+        orderBy("created_at", "desc")
+      );
+      
       const querySnapshot = await getDocs(q);
       
       const formattedData: Transaction[] = querySnapshot.docs.map(doc => {
@@ -62,20 +70,22 @@ const Index = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     fetchTransactions();
   }, [fetchTransactions]);
 
   const addTransaction = async (formData: { description: string; amount: number; type: 'credit' | 'debit' }) => {
+    if (!user) return;
+
     try {
       const docRef = await addDoc(collection(db, "ledger_entries"), {
         description: formData.description,
         amount: formData.amount,
         type: formData.type,
         created_at: Timestamp.now(),
-        user_id: user?.id // Associate with user
+        user_id: user.uid
       });
 
       const newEntry: Transaction = {
@@ -87,9 +97,9 @@ const Index = () => {
       };
 
       setTransactions(prev => [newEntry, ...prev]);
-      showSuccess("Entry saved to Firebase!");
+      showSuccess("Entry saved!");
     } catch (err: any) {
-      showError("Firebase Error: " + err.message);
+      showError("Error: " + err.message);
     }
   };
 
@@ -134,11 +144,13 @@ const Index = () => {
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-2xl shadow-sm border border-gray-100">
             <div className="bg-indigo-100 p-2 rounded-xl">
-              <User className="text-indigo-600" size={18} />
+              <UserIcon className="text-indigo-600" size={18} />
             </div>
             <div className="text-left">
               <p className="text-xs text-gray-500 font-medium">Logged in as</p>
-              <p className="text-sm font-bold text-gray-900 truncate max-w-[150px]">{user?.email}</p>
+              <p className="text-sm font-bold text-gray-900 truncate max-w-[150px]">
+                {user?.displayName || user?.email}
+              </p>
             </div>
           </div>
           <Button 
@@ -161,7 +173,7 @@ const Index = () => {
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
             Daily <span className="text-indigo-600">Ledger</span>
           </h1>
-          <p className="text-lg text-gray-500">Secure financial tracking powered by Firebase & Supabase.</p>
+          <p className="text-lg text-gray-500">Secure financial tracking powered by Firebase.</p>
         </header>
 
         {error && error.includes("Firebase is not configured") && (
