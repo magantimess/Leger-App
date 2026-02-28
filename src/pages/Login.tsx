@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from "@/integrations/supabase/client";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { useAuth } from '@/components/AuthProvider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -33,12 +35,7 @@ const Login = () => {
     const email = `${username.toLowerCase()}@ledger.local`;
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
+      await signInWithEmailAndPassword(auth, email, password);
       showSuccess("Welcome back!");
     } catch (error: any) {
       showError("Invalid credentials. Please contact your administrator.");
@@ -54,37 +51,23 @@ const Login = () => {
     const adminPass = "Madhu2131";
 
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: adminEmail,
-        password: adminPass,
-        options: {
-          data: {
-            username: adminUsername,
-            full_name: adminUsername,
-          }
-        }
+      const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPass);
+      const newUser = userCredential.user;
+
+      await updateProfile(newUser, { displayName: adminUsername });
+
+      await setDoc(doc(db, "users", newUser.uid), {
+        username: adminUsername,
+        displayName: adminUsername,
+        role: 'admin',
+        createdAt: new Date().toISOString()
       });
-
-      if (error) throw error;
-
-      if (data.user) {
-        // Create profile with admin role
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({
-            id: data.user.id,
-            username: adminUsername,
-            role: 'admin'
-          });
-        
-        if (profileError) throw profileError;
-      }
 
       showSuccess("Admin account created! You can now log in.");
       setUsername(adminUsername);
       setPassword(adminPass);
     } catch (error: any) {
-      if (error.message?.includes('already registered')) {
+      if (error.code === 'auth/email-already-in-use') {
         showError("Admin account already exists. Try logging in.");
         setUsername(adminUsername);
         setPassword(adminPass);

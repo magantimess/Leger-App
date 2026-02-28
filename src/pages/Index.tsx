@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { collection, addDoc, query, orderBy, onSnapshot, deleteDoc, doc, where, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import Summary from '@/components/Summary';
 import TransactionForm from '@/components/TransactionForm';
 import TransactionList from '@/components/TransactionList';
 import TransactionFilter from '@/components/TransactionFilter';
 import { MadeWithDyad } from "@/components/made-with-dyad";
-import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Database, LogOut, User as UserIcon, ShieldCheck } from "lucide-react";
@@ -31,66 +32,38 @@ const Index = () => {
   const [endDate, setEndDate] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>('all');
 
-  const fetchTransactions = useCallback(async () => {
-    if (!user) return;
-    
-    try {
-      setLoading(true);
-      
-      const { data, error } = await supabase
-        .from('ledger_entries')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-
-      const formattedData: Transaction[] = data.map(item => ({
-        id: item.id,
-        description: item.description,
-        amount: item.amount,
-        type: item.type,
-        date: item.created_at
-      }));
-
-      setTransactions(formattedData);
-    } catch (err: any) {
-      console.error("Supabase Error:", err);
-      showError("Failed to fetch entries.");
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
   useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
+    if (!user) return;
+
+    const q = query(collection(db, "transactions"), orderBy("date", "desc"));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate?.()?.toISOString() || new Date().toISOString()
+      })) as Transaction[];
+      
+      setTransactions(data);
+      setLoading(false);
+    }, (error) => {
+      console.error("Firestore Error:", error);
+      showError("Failed to fetch entries.");
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const addTransaction = async (formData: { description: string; amount: number; type: 'credit' | 'debit' }) => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('ledger_entries')
-        .insert([{
-          description: formData.description,
-          amount: formData.amount,
-          type: formData.type,
-          user_id: user.id
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      const newEntry: Transaction = {
-        id: data.id,
-        description: data.description,
-        amount: data.amount,
-        type: data.type,
-        date: data.created_at
-      };
-
-      setTransactions(prev => [newEntry, ...prev]);
+      await addDoc(collection(db, "transactions"), {
+        ...formData,
+        userId: user.uid,
+        date: Timestamp.now()
+      });
       showSuccess("Entry saved!");
     } catch (err: any) {
       showError("Error: " + err.message);
@@ -99,14 +72,7 @@ const Index = () => {
 
   const deleteTransaction = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('ledger_entries')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      
-      setTransactions(prev => prev.filter(t => t.id !== id));
+      await deleteDoc(doc(db, "transactions", id));
       showSuccess("Entry removed.");
     } catch (err: any) {
       showError("Delete failed: " + err.message);
@@ -149,7 +115,7 @@ const Index = () => {
             <div className="text-left">
               <p className="text-xs text-gray-500 font-medium">Logged in as</p>
               <p className="text-sm font-bold text-gray-900 truncate max-w-[150px]">
-                {user?.user_metadata?.username || user?.email}
+                {user?.displayName || user?.email}
               </p>
             </div>
             {role === 'admin' && (
@@ -183,7 +149,7 @@ const Index = () => {
           <div className="absolute top-0 right-0 hidden md:block">
             <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 flex items-center gap-1 px-3 py-1">
               <Database size={14} />
-              Supabase Active
+              Firebase Active
             </Badge>
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
@@ -214,19 +180,18 @@ const Index = () => {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                onClick={fetchTransactions} 
                 disabled={loading}
                 className="rounded-full hover:bg-indigo-50 text-indigo-600"
               >
                 <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                Sync
+                Live Sync
               </Button>
             </div>
 
             {loading && transactions.length === 0 ? (
               <div className="text-center py-12 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200">
                 <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
-                <p>Connecting to Supabase...</p>
+                <p>Connecting to Firebase...</p>
               </div>
             ) : (
               <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
