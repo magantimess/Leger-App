@@ -1,9 +1,8 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApp, getApps } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
-// NOTE: You need to replace these with your actual Firebase project configuration
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyCCMafBfl9bd722jUWo6of2IkW778_cUeo",
   authDomain: "mangantimess.firebaseapp.com",
   projectId: "mangantimess",
@@ -13,6 +12,6 @@ const firebaseConfig = {
   measurementId: "G-Q8QKB42TLP"
 };
 
-const app = initializeApp(firebaseConfig);
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app);
 export const auth = getAuth(app);

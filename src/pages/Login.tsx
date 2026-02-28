@@ -2,29 +2,23 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  updateProfile
-} from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/components/AuthProvider';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Wallet, Loader2 } from 'lucide-react';
+import { Wallet, Loader2, ShieldAlert } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 
 const Login = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -37,16 +31,10 @@ const Login = () => {
     setLoading(true);
 
     try {
-      if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
-        showSuccess("Welcome back!");
-      } else {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        await updateProfile(userCredential.user, { displayName: name });
-        showSuccess("Account created successfully!");
-      }
+      await signInWithEmailAndPassword(auth, email, password);
+      showSuccess("Welcome back!");
     } catch (error: any) {
-      showError(error.message);
+      showError("Invalid credentials. Please contact your administrator.");
     } finally {
       setLoading(false);
     }
@@ -59,28 +47,13 @@ const Login = () => {
           <div className="mx-auto bg-indigo-100 w-16 h-16 rounded-2xl flex items-center justify-center mb-4">
             <Wallet className="text-indigo-600" size={32} />
           </div>
-          <CardTitle className="text-3xl font-bold text-gray-900">
-            {isLogin ? 'Welcome Back' : 'Create Account'}
-          </CardTitle>
+          <CardTitle className="text-3xl font-bold text-gray-900">Daily Ledger</CardTitle>
           <CardDescription className="text-gray-500 mt-2">
-            {isLogin ? 'Sign in to manage your daily ledger' : 'Start tracking your finances today'}
+            Sign in to access your secure financial dashboard
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-8">
+        <CardContent className="px-8 pb-8">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
-                <Input 
-                  id="name" 
-                  placeholder="John Doe" 
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="rounded-xl"
-                  required
-                />
-              </div>
-            )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input 
@@ -110,18 +83,17 @@ const Login = () => {
               className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-6 text-lg font-semibold mt-4"
               disabled={loading}
             >
-              {loading ? <Loader2 className="animate-spin" /> : (isLogin ? 'Sign In' : 'Sign Up')}
+              {loading ? <Loader2 className="animate-spin" /> : 'Sign In'}
             </Button>
           </form>
+          
+          <div className="mt-8 p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-3">
+            <ShieldAlert className="text-amber-600 shrink-0" size={20} />
+            <p className="text-xs text-amber-800 leading-relaxed">
+              Public registration is disabled. Only an administrator can create new accounts.
+            </p>
+          </div>
         </CardContent>
-        <CardFooter className="flex justify-center pb-10 pt-4">
-          <button 
-            onClick={() => setIsLogin(!isLogin)}
-            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
-          >
-            {isLogin ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
-          </button>
-        </CardFooter>
       </Card>
     </div>
   );
