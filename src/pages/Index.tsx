@@ -10,9 +10,10 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, Timestamp } from "firebase/firestore";
 import { showError, showSuccess } from "@/utils/toast";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Database, AlertCircle, Settings } from "lucide-react";
+import { RefreshCw, Database, AlertCircle, Settings, LogOut, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useAuth } from '@/components/AuthProvider';
 
 interface Transaction {
   id: string;
@@ -23,6 +24,7 @@ interface Transaction {
 }
 
 const Index = () => {
+  const { user, signOut } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +37,6 @@ const Index = () => {
       setLoading(true);
       setError(null);
       
-      // Check if Firebase is configured
       if (db.app.options.apiKey === "YOUR_API_KEY") {
         throw new Error("Firebase is not configured. Please update src/lib/firebase.ts with your credentials.");
       }
@@ -73,7 +74,8 @@ const Index = () => {
         description: formData.description,
         amount: formData.amount,
         type: formData.type,
-        created_at: Timestamp.now()
+        created_at: Timestamp.now(),
+        user_id: user?.id // Associate with user
       });
 
       const newEntry: Transaction = {
@@ -129,6 +131,26 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
+        <div className="flex justify-between items-center mb-8">
+          <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-2xl shadow-sm border border-gray-100">
+            <div className="bg-indigo-100 p-2 rounded-xl">
+              <User className="text-indigo-600" size={18} />
+            </div>
+            <div className="text-left">
+              <p className="text-xs text-gray-500 font-medium">Logged in as</p>
+              <p className="text-sm font-bold text-gray-900 truncate max-w-[150px]">{user?.email}</p>
+            </div>
+          </div>
+          <Button 
+            variant="outline" 
+            onClick={signOut}
+            className="rounded-2xl border-gray-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all"
+          >
+            <LogOut className="mr-2" size={18} />
+            Logout
+          </Button>
+        </div>
+
         <header className="text-center mb-12 relative">
           <div className="absolute top-0 right-0">
             <Badge variant="outline" className={`${error ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-orange-50 text-orange-700 border-orange-200'} flex items-center gap-1 px-3 py-1`}>
@@ -139,7 +161,7 @@ const Index = () => {
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
             Daily <span className="text-indigo-600">Ledger</span>
           </h1>
-          <p className="text-lg text-gray-500">NoSQL financial tracking powered by Firebase.</p>
+          <p className="text-lg text-gray-500">Secure financial tracking powered by Firebase & Supabase.</p>
         </header>
 
         {error && error.includes("Firebase is not configured") && (
@@ -149,25 +171,6 @@ const Index = () => {
             <AlertDescription className="mt-2">
               <p className="mb-4">To use Firebase, you must add your project credentials to <code className="bg-orange-100 px-1 rounded">src/lib/firebase.ts</code>.</p>
               <p className="text-sm">You can find these in your Firebase Console under Project Settings, then General, then Your apps.</p>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {error && !error.includes("Firebase is not configured") && (
-          <Alert variant="destructive" className="mb-8 bg-rose-50 border-rose-200 text-rose-900 rounded-2xl">
-            <AlertCircle className="h-5 w-5" />
-            <AlertTitle className="font-bold">Database Error</AlertTitle>
-            <AlertDescription className="mt-2">
-              <p className="mb-4">{error}</p>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={fetchTransactions}
-                className="bg-white border-rose-200 hover:bg-rose-100 text-rose-700"
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                Retry
-              </Button>
             </AlertDescription>
           </Alert>
         )}
