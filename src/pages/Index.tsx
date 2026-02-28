@@ -35,20 +35,34 @@ const Index = () => {
   useEffect(() => {
     if (!user) return;
 
-    const q = query(collection(db, "transactions"), orderBy("date", "desc"));
+    // Using 'ledger_entries' as the collection name to match your terminology
+    const q = query(collection(db, "ledger_entries"), orderBy("date", "desc"));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        date: doc.data().date?.toDate?.()?.toISOString() || new Date().toISOString()
-      })) as Transaction[];
+      const data = snapshot.docs.map(doc => {
+        const docData = doc.data();
+        // Handle Firestore Timestamp conversion safely
+        let dateString = new Date().toISOString();
+        if (docData.date instanceof Timestamp) {
+          dateString = docData.date.toDate().toISOString();
+        } else if (docData.date?.seconds) {
+          dateString = new Date(docData.date.seconds * 1000).toISOString();
+        }
+
+        return {
+          id: doc.id,
+          description: docData.description || '',
+          amount: Number(docData.amount) || 0,
+          type: docData.type || 'debit',
+          date: dateString
+        };
+      }) as Transaction[];
       
       setTransactions(data);
       setLoading(false);
     }, (error) => {
-      console.error("Firestore Error:", error);
-      showError("Failed to fetch entries.");
+      console.error("Firestore Sync Error:", error);
+      showError("Failed to sync with database. Check your connection.");
       setLoading(false);
     });
 
@@ -59,21 +73,22 @@ const Index = () => {
     if (!user) return;
 
     try {
-      await addDoc(collection(db, "transactions"), {
+      await addDoc(collection(db, "ledger_entries"), {
         ...formData,
+        createdBy: user.username,
         userId: user.id,
         date: Timestamp.now()
       });
-      showSuccess("Entry saved!");
+      showSuccess("Entry added to ledger!");
     } catch (err: any) {
-      showError("Error: " + err.message);
+      showError("Failed to save: " + err.message);
     }
   };
 
   const deleteTransaction = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "transactions", id));
-      showSuccess("Entry removed.");
+      await deleteDoc(doc(db, "ledger_entries", id));
+      showSuccess("Entry removed from ledger.");
     } catch (err: any) {
       showError("Delete failed: " + err.message);
     }
@@ -149,7 +164,7 @@ const Index = () => {
           <div className="absolute top-0 right-0 hidden md:block">
             <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 flex items-center gap-1 px-3 py-1">
               <Database size={14} />
-              Firestore Auth
+              Live Firestore
             </Badge>
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
