@@ -31,7 +31,6 @@ const Login = () => {
     setLoading(true);
 
     try {
-      // Query the custom users collection for matching credentials
       const q = query(
         collection(db, "users"), 
         where("username", "==", username),
@@ -63,14 +62,14 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4">
-      <Card className="w-full max-w-md border-none shadow-2xl bg-white/80 backdrop-blur-md rounded-3xl overflow-hidden">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 transition-colors duration-300">
+      <Card className="w-full max-w-md border-none shadow-2xl bg-card/80 backdrop-blur-md rounded-3xl overflow-hidden">
         <CardHeader className="text-center pt-10 pb-6">
-          <div className="mx-auto bg-indigo-100 w-16 h-16 rounded-2xl flex items-center justify-center mb-4">
-            <Wallet className="text-indigo-600" size={32} />
+          <div className="mx-auto bg-indigo-100 dark:bg-indigo-900/30 w-16 h-16 rounded-2xl flex items-center justify-center mb-4">
+            <Wallet className="text-indigo-600 dark:text-indigo-400" size={32} />
           </div>
-          <CardTitle className="text-3xl font-bold text-gray-900">Daily Ledger</CardTitle>
-          <CardDescription className="text-gray-500 mt-2">
+          <CardTitle className="text-3xl font-bold text-foreground">MagantiMess Ledger</CardTitle>
+          <CardDescription className="text-muted-foreground mt-2">
             Sign in using your organization credentials
           </CardDescription>
         </CardHeader>
@@ -84,7 +83,7 @@ const Login = () => {
                 placeholder="Enter your username" 
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="rounded-xl"
+                className="rounded-xl bg-background border-border"
                 required
               />
             </div>
@@ -96,13 +95,13 @@ const Login = () => {
                 placeholder="••••••••" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="rounded-xl"
+                className="rounded-xl bg-background border-border"
                 required
               />
             </div>
             <Button 
               type="submit" 
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-6 text-lg font-semibold mt-4"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-6 text-lg font-semibold mt-4 transition-all"
               disabled={loading}
             >
               {loading ? <Loader2 className="animate-spin" /> : 'Sign In'}

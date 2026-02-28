@@ -9,6 +9,7 @@ import TransactionForm from '@/components/TransactionForm';
 import TransactionList from '@/components/TransactionList';
 import TransactionFilter from '@/components/TransactionFilter';
 import { MadeWithDyad } from "@/components/made-with-dyad";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { showError, showSuccess } from "@/utils/toast";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Database, LogOut, User as UserIcon, ShieldCheck } from "lucide-react";
@@ -35,14 +36,12 @@ const Index = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Explicitly using 'ledger_entries' for all data retrieval
     const q = query(collection(db, "ledger_entries"), orderBy("date", "desc"));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => {
         const docData = doc.data();
         
-        // Robust date conversion for Firestore Timestamps
         let dateString = new Date().toISOString();
         if (docData.date instanceof Timestamp) {
           dateString = docData.date.toDate().toISOString();
@@ -76,7 +75,6 @@ const Index = () => {
     if (!user) return;
 
     try {
-      // Explicitly adding to 'ledger_entries' collection
       await addDoc(collection(db, "ledger_entries"), {
         ...formData,
         createdBy: user.username,
@@ -91,7 +89,6 @@ const Index = () => {
 
   const deleteTransaction = async (id: string) => {
     try {
-      // Explicitly deleting from 'ledger_entries' collection
       await deleteDoc(doc(db, "ledger_entries", id));
       showSuccess("Entry removed from ledger.");
     } catch (err: any) {
@@ -125,16 +122,16 @@ const Index = () => {
     .reduce((sum, t) => sum + t.amount, 0);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-background py-12 px-4 sm:px-6 lg:px-8 transition-colors duration-300">
       <div className="max-w-4xl mx-auto">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-          <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-2xl shadow-sm border border-gray-100">
-            <div className="bg-indigo-100 p-2 rounded-xl">
-              <UserIcon className="text-indigo-600" size={18} />
+          <div className="flex items-center gap-3 bg-card px-4 py-2 rounded-2xl shadow-sm border border-border">
+            <div className="bg-indigo-100 dark:bg-indigo-900/30 p-2 rounded-xl">
+              <UserIcon className="text-indigo-600 dark:text-indigo-400" size={18} />
             </div>
             <div className="text-left">
-              <p className="text-xs text-gray-500 font-medium">Logged in as</p>
-              <p className="text-sm font-bold text-gray-900 truncate max-w-[150px]">
+              <p className="text-xs text-muted-foreground font-medium">Logged in as</p>
+              <p className="text-sm font-bold text-foreground truncate max-w-[150px]">
                 {user?.displayName || user?.username}
               </p>
             </div>
@@ -144,11 +141,12 @@ const Index = () => {
           </div>
           
           <div className="flex items-center gap-2 w-full sm:w-auto">
+            <ThemeToggle />
             {role === 'admin' && (
               <Button 
                 variant="outline" 
                 onClick={() => navigate('/admin')}
-                className="flex-1 sm:flex-none rounded-2xl border-indigo-200 text-indigo-600 hover:bg-indigo-50 transition-all"
+                className="flex-1 sm:flex-none rounded-2xl border-indigo-200 dark:border-indigo-900 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all"
               >
                 <ShieldCheck className="mr-2" size={18} />
                 Admin Panel
@@ -157,7 +155,7 @@ const Index = () => {
             <Button 
               variant="outline" 
               onClick={signOut}
-              className="flex-1 sm:flex-none rounded-2xl border-gray-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all"
+              className="flex-1 sm:flex-none rounded-2xl border-border hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:text-rose-600 dark:hover:text-rose-400 hover:border-rose-200 transition-all"
             >
               <LogOut className="mr-2" size={18} />
               Logout
@@ -167,15 +165,15 @@ const Index = () => {
 
         <header className="text-center mb-12 relative">
           <div className="absolute top-0 right-0 hidden md:block">
-            <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 flex items-center gap-1 px-3 py-1">
+            <Badge variant="outline" className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 flex items-center gap-1 px-3 py-1">
               <Database size={14} />
               Live Ledger
             </Badge>
           </div>
-          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
-            Daily <span className="text-indigo-600">Ledger</span>
+          <h1 className="text-4xl font-extrabold text-foreground tracking-tight mb-2">
+            MagantiMess <span className="text-indigo-600">Ledger</span>
           </h1>
-          <p className="text-lg text-gray-500">Secure financial tracking for your organization.</p>
+          <p className="text-lg text-muted-foreground">Secure financial tracking for your organization.</p>
         </header>
 
         <Summary 
@@ -196,12 +194,12 @@ const Index = () => {
           
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-800">Transactions</h2>
+              <h2 className="text-xl font-bold text-foreground">Transactions</h2>
               <Button 
                 variant="ghost" 
                 size="sm" 
                 disabled={loading}
-                className="rounded-full hover:bg-indigo-50 text-indigo-600"
+                className="rounded-full hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400"
               >
                 <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 Live Sync
@@ -209,7 +207,7 @@ const Index = () => {
             </div>
 
             {loading && transactions.length === 0 ? (
-              <div className="text-center py-12 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200">
+              <div className="text-center py-12 text-muted-foreground bg-card rounded-3xl border border-dashed border-border">
                 <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
                 <p>Connecting to ledger_entries...</p>
               </div>
