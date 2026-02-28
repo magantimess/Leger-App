@@ -166,7 +166,7 @@ const Index = () => {
         <header className="text-center mb-12 relative">
           <div className="mx-auto mb-6 flex justify-center">
             <img 
-              src="https://wskwblytqmyjqcgsxeky.supabase.co/storage/v1/object/public/project_assets/maganti_logo.png" 
+              src="/maganti_logo.png" 
               alt="MagantiMess Logo" 
               className="w-24 h-24 object-contain rounded-full shadow-md border-2 border-indigo-500/10"
             />
