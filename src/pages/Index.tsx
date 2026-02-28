@@ -148,7 +148,7 @@ const Index = () => {
             <AlertTitle className="font-bold">Firebase Setup Required</AlertTitle>
             <AlertDescription className="mt-2">
               <p className="mb-4">To use Firebase, you must add your project credentials to <code className="bg-orange-100 px-1 rounded">src/lib/firebase.ts</code>.</p>
-              <p className="text-sm">You can find these in your Firebase Console under Project Settings > General > Your apps.</p>
+              <p className="text-sm">You can find these in your Firebase Console under Project Settings, then General, then Your apps.</p>
             </AlertDescription>
           </Alert>
         )}
