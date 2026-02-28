@@ -2,10 +2,8 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-import { db, firebaseConfig } from '@/lib/firebase';
+import { collection, addDoc, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { useAuth } from '@/components/AuthProvider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -42,30 +40,25 @@ const Admin = () => {
     e.preventDefault();
     setLoading(true);
 
-    // Map username to a valid email format for Firebase
-    const email = `${username.toLowerCase()}@ledger.local`;
-
-    // We use a secondary Firebase app instance to create the user 
-    // so the current admin session isn't automatically logged out.
-    const secondaryApp = initializeApp(firebaseConfig, "Secondary");
-    const secondaryAuth = getAuth(secondaryApp);
-
     try {
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-      const newUser = userCredential.user;
+      // Check if username already exists
+      const q = query(collection(db, "users"), where("username", "==", username));
+      const querySnapshot = await getDocs(q);
 
-      await updateProfile(newUser, { displayName: name });
+      if (!querySnapshot.empty) {
+        showError("Username already exists.");
+        setLoading(false);
+        return;
+      }
 
-      // Create user document in Firestore with role
-      await setDoc(doc(db, "users", newUser.uid), {
+      // Create user document directly in Firestore
+      await addDoc(collection(db, "users"), {
         username,
+        password, // Storing as requested
         displayName: name,
         role: userRole,
-        createdAt: new Date().toISOString()
+        timestamp: Timestamp.now()
       });
-
-      // Sign out the secondary app session immediately
-      await signOut(secondaryAuth);
       
       showSuccess(`User ${username} created successfully!`);
       setUsername('');
@@ -76,8 +69,6 @@ const Admin = () => {
       showError(error.message);
     } finally {
       setLoading(false);
-      // Clean up secondary app
-      secondaryApp.delete();
     }
   };
 
@@ -102,7 +93,7 @@ const Admin = () => {
               <div>
                 <CardTitle className="text-2xl font-bold">User Management</CardTitle>
                 <CardDescription className="text-indigo-100">
-                  Create new accounts for your team members
+                  Create new accounts in the Firestore database
                 </CardDescription>
               </div>
             </div>
@@ -148,17 +139,16 @@ const Admin = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Initial Password</Label>
+                <Label htmlFor="password">Password</Label>
                 <Input 
                   id="password" 
-                  type="password" 
-                  placeholder="••••••••" 
+                  type="text" 
+                  placeholder="Enter password" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="rounded-xl"
                   required
                 />
-                <p className="text-xs text-gray-400">Minimum 6 characters required.</p>
               </div>
 
               <Button 

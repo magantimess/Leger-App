@@ -2,9 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { collection, query, where, getDocs, addDoc, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { useAuth } from '@/components/AuthProvider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,7 +13,7 @@ import { Wallet, Loader2, ShieldAlert, UserPlus } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 
 const Login = () => {
-  const { user } = useAuth();
+  const { user, signIn } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
@@ -32,13 +31,33 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
 
-    const email = `${username.toLowerCase()}@ledger.local`;
-
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      showSuccess("Welcome back!");
+      // Query the custom users collection
+      const q = query(
+        collection(db, "users"), 
+        where("username", "==", username),
+        where("password", "==", password)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0];
+        const userData = userDoc.data();
+        
+        signIn({
+          id: userDoc.id,
+          username: userData.username,
+          role: userData.role,
+          displayName: userData.displayName || userData.username
+        });
+        
+        showSuccess("Welcome back!");
+      } else {
+        showError("Invalid username or password.");
+      }
     } catch (error: any) {
-      showError("Invalid credentials. Please contact your administrator.");
+      showError("Database error: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -47,33 +66,30 @@ const Login = () => {
   const handleSeedAdmin = async () => {
     setSeedLoading(true);
     const adminUsername = "Madhu2131";
-    const adminEmail = `${adminUsername.toLowerCase()}@ledger.local`;
     const adminPass = "Madhu2131";
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPass);
-      const newUser = userCredential.user;
+      // Check if admin already exists in the collection
+      const q = query(collection(db, "users"), where("username", "==", adminUsername));
+      const querySnapshot = await getDocs(q);
 
-      await updateProfile(newUser, { displayName: adminUsername });
-
-      await setDoc(doc(db, "users", newUser.uid), {
-        username: adminUsername,
-        displayName: adminUsername,
-        role: 'admin',
-        createdAt: new Date().toISOString()
-      });
-
-      showSuccess("Admin account created! You can now log in.");
+      if (querySnapshot.empty) {
+        await addDoc(collection(db, "users"), {
+          username: adminUsername,
+          password: adminPass,
+          displayName: adminUsername,
+          role: 'admin',
+          timestamp: Timestamp.now()
+        });
+        showSuccess("Admin account created in Firestore!");
+      } else {
+        showError("Admin account already exists.");
+      }
+      
       setUsername(adminUsername);
       setPassword(adminPass);
     } catch (error: any) {
-      if (error.code === 'auth/email-already-in-use') {
-        showError("Admin account already exists. Try logging in.");
-        setUsername(adminUsername);
-        setPassword(adminPass);
-      } else {
-        showError(error.message);
-      }
+      showError(error.message);
     } finally {
       setSeedLoading(false);
     }
@@ -88,7 +104,7 @@ const Login = () => {
           </div>
           <CardTitle className="text-3xl font-bold text-gray-900">Daily Ledger</CardTitle>
           <CardDescription className="text-gray-500 mt-2">
-            Sign in to access your secure financial dashboard
+            Sign in using your Firestore credentials
           </CardDescription>
         </CardHeader>
         <CardContent className="px-8 pb-8">
@@ -130,7 +146,7 @@ const Login = () => {
             <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-3">
               <ShieldAlert className="text-amber-600 shrink-0" size={20} />
               <p className="text-xs text-amber-800 leading-relaxed">
-                Public registration is disabled. Only an administrator can create new accounts.
+                Authentication is now handled via the Firestore "users" collection.
               </p>
             </div>
 

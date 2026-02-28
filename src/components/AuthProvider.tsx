@@ -1,54 +1,49 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+
+interface UserData {
+  id: string;
+  username: string;
+  role: 'admin' | 'user';
+  displayName?: string;
+}
 
 interface AuthContextType {
-  user: User | null;
+  user: UserData | null;
   role: 'admin' | 'user' | null;
   loading: boolean;
-  signOut: () => Promise<void>;
+  signIn: (user: UserData) => void;
+  signOut: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<'admin' | 'user' | null>(null);
+  const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        try {
-          const userDoc = await getDoc(doc(db, "users", user.uid));
-          if (userDoc.exists()) {
-            setRole(userDoc.data().role);
-          } else {
-            setRole('user');
-          }
-        } catch (error) {
-          console.error("Error fetching user role:", error);
-          setRole('user');
-        }
-      } else {
-        setRole(null);
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    // Check local storage for existing session
+    const savedUser = localStorage.getItem('ledger_user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+    setLoading(false);
   }, []);
 
-  const signOut = async () => {
-    await firebaseSignOut(auth);
+  const signIn = (userData: UserData) => {
+    setUser(userData);
+    localStorage.setItem('ledger_user', JSON.stringify(userData));
+  };
+
+  const signOut = () => {
+    setUser(null);
+    localStorage.removeItem('ledger_user');
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, signOut }}>
+    <AuthContext.Provider value={{ user, role: user?.role || null, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, addDoc, query, orderBy, onSnapshot, deleteDoc, doc, where, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, deleteDoc, doc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import Summary from '@/components/Summary';
 import TransactionForm from '@/components/TransactionForm';
@@ -61,7 +61,7 @@ const Index = () => {
     try {
       await addDoc(collection(db, "transactions"), {
         ...formData,
-        userId: user.uid,
+        userId: user.id,
         date: Timestamp.now()
       });
       showSuccess("Entry saved!");
@@ -115,7 +115,7 @@ const Index = () => {
             <div className="text-left">
               <p className="text-xs text-gray-500 font-medium">Logged in as</p>
               <p className="text-sm font-bold text-gray-900 truncate max-w-[150px]">
-                {user?.displayName || user?.email}
+                {user?.displayName || user?.username}
               </p>
             </div>
             {role === 'admin' && (
@@ -149,7 +149,7 @@ const Index = () => {
           <div className="absolute top-0 right-0 hidden md:block">
             <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 flex items-center gap-1 px-3 py-1">
               <Database size={14} />
-              Firebase Active
+              Firestore Auth
             </Badge>
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
@@ -191,7 +191,7 @@ const Index = () => {
             {loading && transactions.length === 0 ? (
               <div className="text-center py-12 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200">
                 <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
-                <p>Connecting to Firebase...</p>
+                <p>Connecting to Firestore...</p>
               </div>
             ) : (
               <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
