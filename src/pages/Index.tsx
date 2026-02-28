@@ -35,23 +35,26 @@ const Index = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Using 'ledger_entries' as the collection name to match your terminology
+    // Explicitly using 'ledger_entries' for all data retrieval
     const q = query(collection(db, "ledger_entries"), orderBy("date", "desc"));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => {
         const docData = doc.data();
-        // Handle Firestore Timestamp conversion safely
+        
+        // Robust date conversion for Firestore Timestamps
         let dateString = new Date().toISOString();
         if (docData.date instanceof Timestamp) {
           dateString = docData.date.toDate().toISOString();
         } else if (docData.date?.seconds) {
           dateString = new Date(docData.date.seconds * 1000).toISOString();
+        } else if (typeof docData.date === 'string') {
+          dateString = docData.date;
         }
 
         return {
           id: doc.id,
-          description: docData.description || '',
+          description: docData.description || 'No description',
           amount: Number(docData.amount) || 0,
           type: docData.type || 'debit',
           date: dateString
@@ -62,7 +65,7 @@ const Index = () => {
       setLoading(false);
     }, (error) => {
       console.error("Firestore Sync Error:", error);
-      showError("Failed to sync with database. Check your connection.");
+      showError("Database sync failed. Please check your connection.");
       setLoading(false);
     });
 
@@ -73,6 +76,7 @@ const Index = () => {
     if (!user) return;
 
     try {
+      // Explicitly adding to 'ledger_entries' collection
       await addDoc(collection(db, "ledger_entries"), {
         ...formData,
         createdBy: user.username,
@@ -81,12 +85,13 @@ const Index = () => {
       });
       showSuccess("Entry added to ledger!");
     } catch (err: any) {
-      showError("Failed to save: " + err.message);
+      showError("Failed to save entry: " + err.message);
     }
   };
 
   const deleteTransaction = async (id: string) => {
     try {
+      // Explicitly deleting from 'ledger_entries' collection
       await deleteDoc(doc(db, "ledger_entries", id));
       showSuccess("Entry removed from ledger.");
     } catch (err: any) {
@@ -164,7 +169,7 @@ const Index = () => {
           <div className="absolute top-0 right-0 hidden md:block">
             <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 flex items-center gap-1 px-3 py-1">
               <Database size={14} />
-              Live Firestore
+              Live Ledger
             </Badge>
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
@@ -206,7 +211,7 @@ const Index = () => {
             {loading && transactions.length === 0 ? (
               <div className="text-center py-12 text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200">
                 <RefreshCw className="mx-auto h-8 w-8 animate-spin mb-4 text-indigo-400" />
-                <p>Connecting to Firestore...</p>
+                <p>Connecting to ledger_entries...</p>
               </div>
             ) : (
               <TransactionList transactions={filteredTransactions} onDelete={deleteTransaction} />
