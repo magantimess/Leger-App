@@ -2,21 +2,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, getDocs, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/components/AuthProvider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Wallet, Loader2, ShieldAlert, UserPlus } from 'lucide-react';
+import { Wallet, Loader2 } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 
 const Login = () => {
   const { user, signIn } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [seedLoading, setSeedLoading] = useState(false);
   
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -32,7 +31,7 @@ const Login = () => {
     setLoading(true);
 
     try {
-      // Query the custom users collection
+      // Query the custom users collection for matching credentials
       const q = query(
         collection(db, "users"), 
         where("username", "==", username),
@@ -63,38 +62,6 @@ const Login = () => {
     }
   };
 
-  const handleSeedAdmin = async () => {
-    setSeedLoading(true);
-    const adminUsername = "Madhu2131";
-    const adminPass = "Madhu2131";
-
-    try {
-      // Check if admin already exists in the collection
-      const q = query(collection(db, "users"), where("username", "==", adminUsername));
-      const querySnapshot = await getDocs(q);
-
-      if (querySnapshot.empty) {
-        await addDoc(collection(db, "users"), {
-          username: adminUsername,
-          password: adminPass,
-          displayName: adminUsername,
-          role: 'admin',
-          timestamp: Timestamp.now()
-        });
-        showSuccess("Admin account created in Firestore!");
-      } else {
-        showError("Admin account already exists.");
-      }
-      
-      setUsername(adminUsername);
-      setPassword(adminPass);
-    } catch (error: any) {
-      showError(error.message);
-    } finally {
-      setSeedLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4">
       <Card className="w-full max-w-md border-none shadow-2xl bg-white/80 backdrop-blur-md rounded-3xl overflow-hidden">
@@ -104,7 +71,7 @@ const Login = () => {
           </div>
           <CardTitle className="text-3xl font-bold text-gray-900">Daily Ledger</CardTitle>
           <CardDescription className="text-gray-500 mt-2">
-            Sign in using your Firestore credentials
+            Sign in using your organization credentials
           </CardDescription>
         </CardHeader>
         <CardContent className="px-8 pb-8">
@@ -141,25 +108,6 @@ const Login = () => {
               {loading ? <Loader2 className="animate-spin" /> : 'Sign In'}
             </Button>
           </form>
-          
-          <div className="mt-8 space-y-4">
-            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-3">
-              <ShieldAlert className="text-amber-600 shrink-0" size={20} />
-              <p className="text-xs text-amber-800 leading-relaxed">
-                Authentication is now handled via the Firestore "users" collection.
-              </p>
-            </div>
-
-            <Button 
-              variant="outline" 
-              onClick={handleSeedAdmin}
-              disabled={seedLoading}
-              className="w-full rounded-xl border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50"
-            >
-              {seedLoading ? <Loader2 className="animate-spin mr-2" size={16} /> : <UserPlus className="mr-2" size={16} />}
-              Setup Initial Admin (Madhu2131)
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>
